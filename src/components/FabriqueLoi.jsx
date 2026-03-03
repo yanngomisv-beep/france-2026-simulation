@@ -18,24 +18,24 @@ const PROFILS = [
 ]
 
 // ─────────────────────────────────────────────────────────────
-// 10 SCÉNARIOS TYPES (inspirés du brief Gemini)
+// 10 SCÉNARIOS TYPES
 // ─────────────────────────────────────────────────────────────
 
 const SCENARIOS_TYPES = [
-  { emoji: '🏥', label: 'Ségur 2.0',            texte: 'Augmentation de 500€ net pour tous les paramédicaux et fermeture des cliniques privées ne participant pas aux gardes.' },
-  { emoji: '🏥', label: 'Déserts médicaux',      texte: 'Obligation pour tout nouveau médecin de s\'installer 3 ans en zone sous-dense sous peine de non-remboursement par la CPAM.' },
-  { emoji: '🛡️', label: 'Bouclier de proximité', texte: 'Création de polices municipales renforcées sous autorité des maires pour pallier le manque d\'effectifs de la Police Nationale.' },
-  { emoji: '🛡️', label: 'Surveillance IA',       texte: 'Généralisation de la reconnaissance faciale dans les transports pour identifier les personnes fichées S.' },
-  { emoji: '⚖️', label: 'Verdict rapide',         texte: 'Suppression du jury populaire pour les délits financiers afin de diviser par deux les délais de jugement.' },
+  { emoji: '🏥', label: 'Ségur 2.0',             texte: 'Augmentation de 500€ net pour tous les paramédicaux et fermeture des cliniques privées ne participant pas aux gardes.' },
+  { emoji: '🏥', label: 'Déserts médicaux',       texte: "Obligation pour tout nouveau médecin de s'installer 3 ans en zone sous-dense sous peine de non-remboursement par la CPAM." },
+  { emoji: '🛡️', label: 'Bouclier de proximité',  texte: "Création de polices municipales renforcées sous autorité des maires pour pallier le manque d'effectifs de la Police Nationale." },
+  { emoji: '🛡️', label: 'Surveillance IA',        texte: 'Généralisation de la reconnaissance faciale dans les transports pour identifier les personnes fichées S.' },
+  { emoji: '⚖️', label: 'Verdict rapide',          texte: 'Suppression du jury populaire pour les délits financiers afin de diviser par deux les délais de jugement.' },
   { emoji: '⚖️', label: 'Responsabilité parentale',texte: 'Suppression des allocations familiales et amendes pour les parents de mineurs récidivistes.' },
-  { emoji: '💼', label: 'Semaine 4 jours',        texte: 'Passage à 32h payées 35h pour les métiers à forte pénibilité, financé par une taxe sur les dividendes.' },
-  { emoji: '💼', label: 'Revenu Jeunes',          texte: 'Versement de 800€/mois pour tous les 18-25 ans sans ressources, conditionné à une formation ou un service civique.' },
-  { emoji: '🎓', label: 'Uniforme républicain',   texte: 'Obligation du port de l\'uniforme dans tous les collèges et lycées publics, financé par l\'État.' },
-  { emoji: '🎓', label: 'Sélection post-bac',     texte: 'Remplacement de Parcoursup par un concours national d\'entrée pour chaque filière universitaire.' },
+  { emoji: '💼', label: 'Semaine 4 jours',         texte: 'Passage à 32h payées 35h pour les métiers à forte pénibilité, financé par une taxe sur les dividendes.' },
+  { emoji: '💼', label: 'Revenu Jeunes',           texte: "Versement de 800€/mois pour tous les 18-25 ans sans ressources, conditionné à une formation ou un service civique." },
+  { emoji: '🎓', label: 'Uniforme républicain',    texte: "Obligation du port de l'uniforme dans tous les collèges et lycées publics, financé par l'État." },
+  { emoji: '🎓', label: 'Sélection post-bac',      texte: 'Remplacement de Parcoursup par un concours national d\'entrée pour chaque filière universitaire.' },
 ]
 
 // ─────────────────────────────────────────────────────────────
-// PROMPT SYSTÈME POUR L'IA
+// PROMPT SYSTÈME
 // ─────────────────────────────────────────────────────────────
 
 function construirePrompt(intention, etatJeu) {
@@ -79,11 +79,11 @@ Génère UNIQUEMENT un objet JSON valide (sans balises markdown, sans texte avan
     "industrie":   { "impact": "positif|negatif|neutre", "detail": "1 phrase courte" }
   },
   "reactions_partis": {
-    "LFI":      { "position": "pour|contre|abstention", "raison": "1 phrase" },
-    "PS_ECO":   { "position": "pour|contre|abstention", "raison": "1 phrase" },
-    "EPR":      { "position": "pour|contre|abstention", "raison": "1 phrase" },
-    "LR":       { "position": "pour|contre|abstention", "raison": "1 phrase" },
-    "RN":       { "position": "pour|contre|abstention", "raison": "1 phrase" }
+    "LFI":    { "position": "pour|contre|abstention", "raison": "1 phrase" },
+    "PS_ECO": { "position": "pour|contre|abstention", "raison": "1 phrase" },
+    "EPR":    { "position": "pour|contre|abstention", "raison": "1 phrase" },
+    "LR":     { "position": "pour|contre|abstention", "raison": "1 phrase" },
+    "RN":     { "position": "pour|contre|abstention", "raison": "1 phrase" }
   },
   "risques": {
     "conseil_constitutionnel": "aucun|faible|moyen|eleve",
@@ -153,14 +153,14 @@ function CartePartiReaction({ nom, data }) {
 
 function BadgeRisque({ niveau, label }) {
   const styles = {
-    aucun:        'bg-green-900 text-green-300',
-    conforme:     'bg-green-900 text-green-300',
-    faible:       'bg-yellow-900 text-yellow-300',
-    risque_faible:'bg-yellow-900 text-yellow-300',
-    moyen:        'bg-orange-900 text-orange-300',
-    risque_moyen: 'bg-orange-900 text-orange-300',
-    eleve:        'bg-red-900 text-red-300',
-    risque_eleve: 'bg-red-900 text-red-300',
+    aucun:         'bg-green-900 text-green-300',
+    conforme:      'bg-green-900 text-green-300',
+    faible:        'bg-yellow-900 text-yellow-300',
+    risque_faible: 'bg-yellow-900 text-yellow-300',
+    moyen:         'bg-orange-900 text-orange-300',
+    risque_moyen:  'bg-orange-900 text-orange-300',
+    eleve:         'bg-red-900 text-red-300',
+    risque_eleve:  'bg-red-900 text-red-300',
   }
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-semibold ${styles[niveau] ?? 'bg-slate-700 text-slate-300'}`}>
@@ -182,7 +182,7 @@ function BadgeCout({ niveau }) {
   }
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-semibold ${styles[niveau] ?? 'bg-slate-700 text-slate-300'}`}>
-      {emojis[niveau]} Coût : {niveau.replace(/_/g, ' ')}
+      {emojis[niveau] ?? '⚪'} Coût : {niveau?.replace(/_/g, ' ')}
     </span>
   )
 }
@@ -192,13 +192,13 @@ function BadgeCout({ niveau }) {
 // ─────────────────────────────────────────────────────────────
 
 export default function FabriqueLoi({ etatJeu, voterLoi }) {
-  const [intention, setIntention]     = useState('')
-  const [loading, setLoading]         = useState(false)
-  const [erreur, setErreur]           = useState(null)
-  const [loiGeneree, setLoiGeneree]   = useState(null)
-  const [adoptee, setAdoptee]         = useState(false)
+  const [intention, setIntention]   = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [erreur, setErreur]         = useState(null)
+  const [loiGeneree, setLoiGeneree] = useState(null)
+  const [adoptee, setAdoptee]       = useState(false)
 
-  // ── Générer la loi via l'API Anthropic ──────────────────
+  // ── Appel via proxy Vercel ───────────────────────────────
   async function genererLoi() {
     if (!intention.trim() || intention.length < 10) {
       setErreur("Décrivez votre intention en au moins 10 caractères.")
@@ -210,7 +210,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     setAdoptee(false)
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/claude', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -224,6 +224,11 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
       })
 
       const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error?.message ?? `Erreur ${response.status}`)
+      }
+
       const texte = data.content
         .filter(b => b.type === 'text')
         .map(b => b.text)
@@ -232,37 +237,34 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
       const loi = JSON.parse(texte.replace(/```json|```/g, '').trim())
       setLoiGeneree(loi)
     } catch (e) {
-      setErreur("Erreur lors de la génération. Vérifiez votre connexion ou reformulez.")
+      setErreur(`Erreur : ${e.message}`)
       console.error(e)
     } finally {
       setLoading(false)
     }
   }
 
-  // ── Adopter la loi générée ───────────────────────────────
+  // ── Valider la loi ───────────────────────────────────────
   function adopterLoi() {
     if (!loiGeneree) return
-    // Appliquer les impacts directement via voterLoi avec un id unique
-    const loiId = `LOI_JOUEUR_${Date.now()}`
-    // On pourrait étendre voterLoi pour accepter des lois custom — pour l'instant on notifie
     setAdoptee(true)
   }
 
-  const INDICATEURS_IMPACTS = [
-    { key: 'popularite_joueur',       label: 'Popularité',      unite: '%' },
-    { key: 'tension_sociale',         label: 'Tension sociale', unite: '',  inverse: true },
-    { key: 'deficit_milliards',       label: 'Déficit',         unite: ' Md€', inverse: true },
-    { key: 'inflation_pct',           label: 'Inflation',       unite: '%', inverse: true },
-    { key: 'pib_croissance_pct',      label: 'PIB',             unite: '%' },
-    { key: 'relation_ue',             label: 'Relations UE',    unite: '' },
-    { key: 'indice_confiance_marches',label: 'Marchés',         unite: '' },
-    { key: 'consentement_impot',      label: 'Consentement impôt', unite: '' },
+  const INDICATEURS = [
+    { key: 'popularite_joueur',        label: 'Popularité',         unite: '%' },
+    { key: 'tension_sociale',          label: 'Tension sociale',    unite: '',     inverse: true },
+    { key: 'deficit_milliards',        label: 'Déficit',            unite: ' Md€', inverse: true },
+    { key: 'inflation_pct',            label: 'Inflation',          unite: '%',    inverse: true },
+    { key: 'pib_croissance_pct',       label: 'PIB',                unite: '%' },
+    { key: 'relation_ue',              label: 'Relations UE',       unite: '' },
+    { key: 'indice_confiance_marches', label: 'Marchés',            unite: '' },
+    { key: 'consentement_impot',       label: 'Consentement impôt', unite: '' },
   ]
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-6 pb-12">
 
-      {/* ── En-tête ── */}
+      {/* En-tête */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white">⚗️ Fabrique de loi</h2>
@@ -275,7 +277,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         </div>
       </div>
 
-      {/* ── Saisie libre ── */}
+      {/* Saisie */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 flex flex-col gap-4">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-lg">✍️</span>
@@ -325,7 +327,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         </button>
       </div>
 
-      {/* ── Résultat ── */}
+      {/* Résultat */}
       {loiGeneree && !adoptee && (
         <div className="flex flex-col gap-5">
 
@@ -354,7 +356,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
               {loiGeneree.expose_motifs}
             </p>
 
-            {/* Articles */}
             <div className="flex flex-col gap-1.5">
               {loiGeneree.articles?.map((art, i) => (
                 <p key={i} className="text-xs text-slate-400 bg-slate-900 rounded p-2">{art}</p>
@@ -362,11 +363,11 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
             </div>
           </div>
 
-          {/* Impacts sur les variables */}
+          {/* Impacts variables */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
             <h4 className="font-semibold text-white mb-4">📊 Impacts sur la République</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {INDICATEURS_IMPACTS.map(({ key, label, unite, inverse }) => (
+              {INDICATEURS.map(({ key, label, unite, inverse }) => (
                 <div key={key} className="bg-slate-900 rounded-lg p-3 flex flex-col gap-1">
                   <p className="text-xs text-slate-500">{label}</p>
                   <BadgeImpact
@@ -386,9 +387,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
               {PROFILS.map(profil => {
                 const data = loiGeneree.profils?.[profil.id]
                 if (!data) return null
-                return (
-                  <CarteProfilImpact key={profil.id} profil={profil} data={data} />
-                )
+                return <CarteProfilImpact key={profil.id} profil={profil} data={data} />
               })}
             </div>
           </div>
@@ -402,7 +401,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
               ))}
             </div>
 
-            {/* Amendement RN */}
             {loiGeneree.amendement_rn && (
               <div className="mt-3 bg-blue-900/20 border border-blue-800 rounded-lg p-3">
                 <p className="text-xs text-blue-400 font-semibold mb-1">
@@ -434,7 +432,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
             )}
           </div>
 
-          {/* Boutons d'action */}
+          {/* Boutons */}
           <div className="flex gap-3 flex-wrap">
             <button
               onClick={adopterLoi}
@@ -458,7 +456,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         </div>
       )}
 
-      {/* ── Loi adoptée ── */}
+      {/* Confirmation adoption */}
       {adoptee && loiGeneree && (
         <div className="bg-green-900/30 border border-green-700 rounded-xl p-8 text-center flex flex-col gap-4">
           <span className="text-5xl">🏛️</span>
@@ -476,6 +474,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
           </button>
         </div>
       )}
+
     </div>
   )
 }
