@@ -1,0 +1,193 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "France 2026 - Simulation Souveraine — Schémas de données",
+
+  "Departement": {
+    "id": "75",
+    "code_insee": "75",
+    "nom": "Paris",
+    "region": "Île-de-France",
+    "chef_lieu": "Paris",
+
+    "geo": {
+      "latitude": 48.8566,
+      "longitude": 2.3522,
+      "superficie_km2": 105,
+      "svg_path_id": "dep-75"
+    },
+
+    "demographics": {
+      "population": 2161000,
+      "densite_hab_km2": 20581,
+      "age_median": 38.4,
+      "taux_urbanisation": 100,
+      "part_etrangers_pct": 14.2,
+      "part_diplomes_sup_pct": 45.1
+    },
+
+    "economie": {
+      "pib_par_hab_euros": 62400,
+      "taux_chomage_pct": 7.8,
+      "taux_pauvrete_pct": 15.9,
+      "revenu_median_mensuel": 2340,
+      "part_industrie_pct": 4.1,
+      "part_services_pct": 88.2,
+      "part_agriculture_pct": 0.1,
+      "dette_locale_millions": 8200,
+      "budget_annuel_millions": 9600
+    },
+
+    "social": {
+      "indice_securite": 38,
+      "indice_education": 71,
+      "indice_sante": 65,
+      "taux_abstention_historique_pct": 52.1,
+      "humeur_sociale": "tendue",
+      "nb_greves_actives": 2,
+      "nb_manifestations_mois": 4
+    },
+
+    "energie": {
+      "dependance_reseau_national_pct": 95,
+      "part_renouvelable_pct": 8.2,
+      "consommation_gwh_an": 4210
+    },
+
+    "politique": {
+      "maire_actuel": {
+        "nom": "Anne Hidalgo",
+        "parti": "PS",
+        "mandat_debut": 2020
+      },
+      "resultats_historiques": {
+        "presidentielle_2022_t1": {
+          "MACRON": 35.2,
+          "MELENCHON": 29.8,
+          "LE_PEN": 12.4,
+          "PECRESSE": 9.1,
+          "JADOT": 7.6,
+          "autres": 5.9
+        },
+        "presidentielle_2022_t2": {
+          "MACRON": 68.1,
+          "LE_PEN": 31.9
+        },
+        "legislatives_2024": {
+          "NFP": 42.1,
+          "ENS": 26.3,
+          "RN": 14.2,
+          "LR": 6.8,
+          "autres": 10.6
+        }
+      },
+      "intentions_vote_mars_2026": {
+        "LFI": 18.5,
+        "PS_ECO": 22.3,
+        "EPR": 19.1,
+        "RN": 17.8,
+        "LR": 8.4,
+        "ANIMALISTE": 2.1,
+        "PATRIOTES": 1.8,
+        "TRAVAILLEURS": 1.2,
+        "autres": 8.8
+      },
+      "sensibilite_ideologique": {
+        "axe_gauche_droite": -1.8,
+        "axe_progressiste_conservateur": -2.1,
+        "axe_pro_anti_ue": 0.4,
+        "axe_ecologie": 1.6
+      }
+    },
+
+    "evenements_actifs": [],
+    "modificateurs_temporaires": {
+      "bonus_popularite_gauche": 0,
+      "malus_securite": 0,
+      "multiplicateur_abstention": 1.0
+    }
+  },
+
+  "Candidat": {
+    "id": "cand_melenchon_001",
+    "prenom": "Jean-Luc",
+    "nom": "Mélenchon",
+    "age": 74,
+    "parti": "LFI",
+    "bloc": "GAUCHE_RADICALE",
+
+    "identite": {
+      "photo_url": "/assets/candidats/melenchon.jpg",
+      "biographie_courte": "Fondateur de LFI, figure de la gauche radicale française.",
+      "region_origine": "Bouches-du-Rhône",
+      "statut": "chef_de_parti"
+    },
+
+    "scores": {
+      "charisme": 87,
+      "competence_economique": 72,
+      "competence_diplomatique": 68,
+      "competence_securite": 45,
+      "competence_ecologie": 61,
+      "gestion_crise": 70,
+      "communication_media": 85,
+      "popularite_nationale": 28.4,
+      "cote_aupres_syndicats": 72,
+      "cote_aupres_patronat": 8
+    },
+
+    "programme": {
+      "fiscal": {
+        "tranche_ir_max_pct": 90,
+        "ise_patrimoine": true,
+        "flat_tax_suppression": true,
+        "impact_pib_estime": -0.8,
+        "impact_deficit_milliards": -45
+      },
+      "social": {
+        "retraite_age_legal": 60,
+        "smic_mensuel_euros": 1600,
+        "nationalisation_energie": true,
+        "impact_dette_milliards": 120
+      },
+      "europeen": {
+        "position_ue": "refondir",
+        "bras_de_fer_bce": true,
+        "non_conformite_pacte_stabilite": true,
+        "risque_sanction_ue": 0.75
+      },
+      "securite": {
+        "politique_migratoire": "regularisation",
+        "dissolution_brav_m": true,
+        "police_de_proximite": true
+      },
+      "energie": {
+        "sortie_nucleaire": true,
+        "objectif_renouvelable_2035_pct": 100,
+        "cout_transition_milliards": 200
+      }
+    },
+
+    "affinites_partis": {
+      "LFI": 1.0,
+      "PS_ECO": 0.55,
+      "TRAVAILLEURS": 0.40,
+      "ANIMALISTE": 0.30,
+      "EPR": -0.60,
+      "LR": -0.80,
+      "RN": -0.95,
+      "PATRIOTES": -0.85,
+      "UPR": -0.80
+    },
+
+    "evenements_declenches": [],
+
+    "etat": {
+      "est_joueur": false,
+      "est_candidat_presidentielle": true,
+      "poste_actuel": "Député 13e arr. Marseille",
+      "sante": 88,
+      "scandale_actif": false,
+      "niveau_scandale": 0
+    }
+  }
+}
