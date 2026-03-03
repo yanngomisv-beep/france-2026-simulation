@@ -1,10 +1,6 @@
-import { useState } from 'react'
-import {
-  DEPARTEMENTS_SVG,
-  DOMTOM_SVG,
-  COULEURS_PARTIS,
-  getPolitiqueDepartement,
-} from '../data/departements-svg.js'
+import { useState, useEffect, useRef } from 'react'
+import * as d3 from 'd3'
+import { COULEURS_PARTIS, getPolitiqueDepartement } from '../data/departements-svg.js'
 
 const MODES = [
   { id: 'politique',  label: '🗳️ Tendance politique' },
@@ -12,51 +8,36 @@ const MODES = [
   { id: 'popularite', label: '📊 Popularité' },
 ]
 
-// Couleur selon le mode
 function getCouleurDep(code, mode, etatJeu) {
   const pol = getPolitiqueDepartement(code)
-
-  if (mode === 'politique') {
-    return COULEURS_PARTIS[pol.parti] ?? '#94a3b8'
-  }
-
+  if (mode === 'politique') return COULEURS_PARTIS[pol.parti] ?? '#94a3b8'
   if (mode === 'tension') {
-    const tension = etatJeu?.tension_sociale ?? 45
-    const intensite = Math.min(1, tension / 100)
-    const r = Math.round(80 + intensite * 175)
-    const g = Math.round(120 - intensite * 120)
-    const b = Math.round(60 - intensite * 60)
-    return `rgb(${r},${g},${b})`
+    const t = Math.min(1, (etatJeu?.tension_sociale ?? 45) / 100)
+    return `rgb(${Math.round(80 + t*175)},${Math.round(120 - t*120)},${Math.round(60 - t*60)})`
   }
-
   if (mode === 'popularite') {
-    const pop = etatJeu?.popularite_joueur ?? 42
-    const intensite = pop / 100
-    const r = Math.round(220 - intensite * 180)
-    const g = Math.round(50 + intensite * 160)
-    const b = Math.round(50)
-    return `rgb(${r},${g},${b})`
+    const p = (etatJeu?.popularite_joueur ?? 42) / 100
+    return `rgb(${Math.round(220 - p*180)},${Math.round(50 + p*160)},50)`
   }
-
   return '#475569'
 }
 
-function PanneauDepartement({ code, onFermer }) {
-  const dep = DEPARTEMENTS_SVG[code] ?? DOMTOM_SVG[code]
-  const pol = getPolitiqueDepartement(code)
-  if (!dep) return null
+function PanneauDepartement({ feature, onFermer }) {
+  if (!feature) return null
+  const code = feature.properties.code
+  const nom  = feature.properties.nom
+  const pol  = getPolitiqueDepartement(code)
 
   return (
     <div className="absolute top-4 right-4 w-72 bg-slate-800 border border-slate-600 rounded-xl p-4 shadow-xl z-10">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-bold text-white text-lg">{dep.nom}</h3>
-          <p className="text-xs text-slate-400">{dep.chef_lieu} — Dep. {code}</p>
+          <h3 className="font-bold text-white text-lg">{nom}</h3>
+          <p className="text-xs text-slate-400">Département {code}</p>
         </div>
         <button onClick={onFermer} className="text-slate-500 hover:text-white text-lg">✕</button>
       </div>
 
-      {/* Parti dominant */}
       <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-slate-900">
         <div className="w-3 h-3 rounded-full flex-shrink-0"
           style={{ backgroundColor: COULEURS_PARTIS[pol.parti] }} />
@@ -66,24 +47,18 @@ function PanneauDepartement({ code, onFermer }) {
         </div>
       </div>
 
-      {/* Intentions de vote */}
       <div className="flex flex-col gap-1.5">
-        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">
-          Intentions de vote 2026
-        </p>
+        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Intentions 2026</p>
         {Object.entries(pol.intentions)
-          .sort(([, a], [, b]) => b - a)
+          .sort(([,a],[,b]) => b - a)
           .map(([parti, pct]) => (
             <div key={parti} className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
               <span className="text-xs text-slate-400 w-20">{parti}</span>
               <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${pct}%`,
-                    backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8',
-                  }} />
+                <div className="h-full rounded-full"
+                  style={{ width: `${pct}%`, backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
               </div>
               <span className="text-xs text-white font-semibold w-8 text-right">{pct}%</span>
             </div>
@@ -93,48 +68,100 @@ function PanneauDepartement({ code, onFermer }) {
   )
 }
 
-function Legende({ mode }) {
-  if (mode === 'politique') {
-    return (
-      <div className="flex flex-wrap gap-2 mt-3">
-        {Object.entries(COULEURS_PARTIS)
-          .filter(([p]) => ['LFI','PS_ECO','EPR','LR','RN','PATRIOTES','UPR'].includes(p))
-          .map(([parti, couleur]) => (
-            <div key={parti} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: couleur }} />
-              <span className="text-xs text-slate-400">{parti}</span>
-            </div>
-          ))}
-      </div>
-    )
-  }
-  if (mode === 'tension') {
-    return (
-      <div className="flex items-center gap-3 mt-3">
-        <span className="text-xs text-slate-400">Faible</span>
-        <div className="flex-1 h-3 rounded-full"
-          style={{ background: 'linear-gradient(to right, rgb(80,120,60), rgb(255,60,0))' }} />
-        <span className="text-xs text-slate-400">Élevée</span>
-      </div>
-    )
-  }
-  if (mode === 'popularite') {
-    return (
-      <div className="flex items-center gap-3 mt-3">
-        <span className="text-xs text-slate-400">Impopulaire</span>
-        <div className="flex-1 h-3 rounded-full"
-          style={{ background: 'linear-gradient(to right, rgb(220,50,50), rgb(40,210,50))' }} />
-        <span className="text-xs text-slate-400">Populaire</span>
-      </div>
-    )
-  }
-  return null
-}
-
 export default function Carte({ etatJeu }) {
-  const [mode, setMode] = useState('politique')
-  const [depSelectionnee, setDepSelectionnee] = useState(null)
-  const [hover, setHover] = useState(null)
+  const svgRef       = useRef(null)
+  const [mode, setMode]             = useState('politique')
+  const [geoData, setGeoData]       = useState(null)
+  const [selected, setSelected]     = useState(null)
+  const [hover, setHover]           = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState(null)
+
+  // ── Charger le GeoJSON depuis un CDN public ──────────────
+  useEffect(() => {
+    setLoading(true)
+    fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson')
+      .then(r => r.json())
+      .then(data => {
+        // Normaliser les propriétés
+        data.features = data.features.map(f => ({
+          ...f,
+          properties: {
+            ...f.properties,
+            code: f.properties.code,
+            nom:  f.properties.nom,
+          }
+        }))
+        setGeoData(data)
+        setLoading(false)
+      })
+      .catch(e => {
+        setError("Impossible de charger la carte. Vérifiez votre connexion.")
+        setLoading(false)
+      })
+  }, [])
+
+  // ── Dessiner la carte avec D3 ────────────────────────────
+  useEffect(() => {
+    if (!geoData || !svgRef.current) return
+
+    const container = svgRef.current.parentElement
+    const W = container.clientWidth || 700
+    const H = Math.round(W * 0.75)
+
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
+    svg.attr('width', W).attr('height', H)
+
+    // Projection centrée sur la France métropolitaine
+    const projection = d3.geoConicConformal()
+      .center([2.454071, 46.279229])
+      .scale(W * 3.5)
+      .translate([W / 2, H / 2])
+
+    const path = d3.geoPath().projection(projection)
+
+    // Groupe principal
+    const g = svg.append('g')
+
+    // Dessiner les départements
+    g.selectAll('path')
+      .data(geoData.features)
+      .enter()
+      .append('path')
+      .attr('d', path)
+      .attr('fill', d => getCouleurDep(d.properties.code, mode, etatJeu))
+      .attr('fill-opacity', d => d.properties.code === hover ? 1 : 0.82)
+      .attr('stroke', d => d.properties.code === selected?.properties?.code ? '#ffffff' : '#0f172a')
+      .attr('stroke-width', d => d.properties.code === selected?.properties?.code ? 2 : 0.6)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event, d) {
+        setHover(d.properties.code)
+        d3.select(this).attr('fill-opacity', 1)
+        // Tooltip nom
+        g.append('text')
+          .attr('id', 'tooltip-dep')
+          .attr('x', () => { const c = path.centroid(d); return c[0] })
+          .attr('y', () => { const c = path.centroid(d); return c[1] - 8 })
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'white')
+          .attr('font-size', '10')
+          .attr('font-weight', 'bold')
+          .attr('pointer-events', 'none')
+          .text(d.properties.nom)
+      })
+      .on('mouseout', function(event, d) {
+        setHover(null)
+        d3.select(this).attr('fill-opacity', 0.82)
+        g.select('#tooltip-dep').remove()
+      })
+      .on('click', function(event, d) {
+        setSelected(prev =>
+          prev?.properties?.code === d.properties.code ? null : d
+        )
+      })
+
+  }, [geoData, mode, etatJeu, selected, hover])
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-4">
@@ -144,15 +171,12 @@ export default function Carte({ etatJeu }) {
         <h2 className="text-lg font-bold text-white">🗺️ Carte de France</h2>
         <div className="flex gap-2">
           {MODES.map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMode(m.id)}
+            <button key={m.id} onClick={() => setMode(m.id)}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 mode === m.id
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
+              }`}>
               {m.label}
             </button>
           ))}
@@ -160,122 +184,67 @@ export default function Carte({ etatJeu }) {
       </div>
 
       {/* Carte */}
-      <div className="relative bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="relative bg-slate-900 rounded-xl border border-slate-700 overflow-hidden"
+        style={{ minHeight: 400 }}>
 
-        <svg
-          viewBox="0 0 750 1100"
-          className="w-full"
-          style={{ maxHeight: '80vh' }}
-        >
-          {/* Fond */}
-          <rect width="750" height="1100" fill="#0f172a" />
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-slate-400 text-sm animate-pulse">
+              🗺️ Chargement de la carte...
+            </div>
+          </div>
+        )}
 
-          {/* Séparateur DOM-TOM */}
-          <line x1="20" y1="800" x2="730" y2="800"
-            stroke="#334155" strokeWidth="1" strokeDasharray="6,4" />
-          <text x="30" y="815" fill="#475569" fontSize="11">
-            Départements et Régions d'Outre-Mer
-          </text>
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-red-400 text-sm">{error}</div>
+          </div>
+        )}
 
-          {/* Départements métropolitains */}
-          {Object.entries(DEPARTEMENTS_SVG)
-            .filter(([, dep]) => dep.path)
-            .map(([code, dep]) => {
-              const couleur = getCouleurDep(code, mode, etatJeu)
-              const estSurvole = hover === code
-              const estSelectionne = depSelectionnee === code
+        <svg ref={svgRef} className="w-full" />
 
-              return (
-                <g key={code}
-                  onClick={() => setDepSelectionnee(estSelectionne ? null : code)}
-                  onMouseEnter={() => setHover(code)}
-                  onMouseLeave={() => setHover(null)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <path
-                    d={dep.path}
-                    fill={couleur}
-                    fillOpacity={estSurvole ? 1 : 0.82}
-                    stroke={estSelectionne ? '#ffffff' : '#0f172a'}
-                    strokeWidth={estSelectionne ? 2 : 0.8}
-                  />
-                  {/* Tooltip au survol */}
-                  {estSurvole && (
-                    <g>
-                      <rect
-                        x={dep.cx - 28} y={dep.cy - 22}
-                        width={56} height={18}
-                        rx={3} fill="#1e293b"
-                        stroke="#475569" strokeWidth={0.5}
-                      />
-                      <text
-                        x={dep.cx} y={dep.cy - 10}
-                        textAnchor="middle"
-                        fill="white" fontSize="8"
-                        fontWeight="bold"
-                      >
-                        {dep.nom.substring(0, 12)}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              )
-            })}
-
-          {/* DOM-TOM */}
-          {Object.entries(DOMTOM_SVG).map(([code, dep]) => {
-            const couleur = getCouleurDep(code, mode, etatJeu)
-            const estSurvole = hover === code
-            const estSelectionne = depSelectionnee === code
-
-            return (
-              <g key={code}
-                onClick={() => setDepSelectionnee(estSelectionne ? null : code)}
-                onMouseEnter={() => setHover(code)}
-                onMouseLeave={() => setHover(null)}
-                style={{ cursor: 'pointer' }}
-              >
-                {/* Encart de fond */}
-                <rect
-                  x={dep.encart.x - 5} y={dep.encart.y - 5}
-                  width={dep.encart.w + 10} height={dep.encart.h + 10}
-                  rx={4} fill="#1e293b" stroke="#334155" strokeWidth={0.8}
-                />
-                <path
-                  d={dep.path}
-                  fill={couleur}
-                  fillOpacity={estSurvole ? 1 : 0.82}
-                  stroke={estSelectionne ? '#ffffff' : '#0f172a'}
-                  strokeWidth={estSelectionne ? 2 : 0.8}
-                />
-                <text
-                  x={dep.cx} y={dep.encart.y + dep.encart.h + 4}
-                  textAnchor="middle"
-                  fill="#94a3b8" fontSize="9"
-                >
-                  {dep.nom}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
-
-        {/* Panneau département sélectionné */}
-        {depSelectionnee && (
+        {selected && (
           <PanneauDepartement
-            code={depSelectionnee}
-            onFermer={() => setDepSelectionnee(null)}
+            feature={selected}
+            onFermer={() => setSelected(null)}
           />
         )}
       </div>
 
       {/* Légende */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Légende</p>
-        <Legende mode={mode} />
+        <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Légende</p>
+        {mode === 'politique' && (
+          <div className="flex flex-wrap gap-3">
+            {Object.entries(COULEURS_PARTIS)
+              .filter(([p]) => ['LFI','PS_ECO','EPR','LR','RN','PATRIOTES','UPR'].includes(p))
+              .map(([parti, couleur]) => (
+                <div key={parti} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: couleur }} />
+                  <span className="text-xs text-slate-400">{parti}</span>
+                </div>
+              ))}
+          </div>
+        )}
+        {mode === 'tension' && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400">Faible</span>
+            <div className="flex-1 h-3 rounded-full"
+              style={{ background: 'linear-gradient(to right, rgb(80,120,60), rgb(255,60,0))' }} />
+            <span className="text-xs text-slate-400">Élevée</span>
+          </div>
+        )}
+        {mode === 'popularite' && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400">Impopulaire</span>
+            <div className="flex-1 h-3 rounded-full"
+              style={{ background: 'linear-gradient(to right, rgb(220,50,50), rgb(40,210,50))' }} />
+            <span className="text-xs text-slate-400">Populaire</span>
+          </div>
+        )}
       </div>
 
-      {/* Stats nationales */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Popularité nationale', val: `${etatJeu?.popularite_joueur ?? 42}%` },
@@ -289,6 +258,7 @@ export default function Carte({ etatJeu }) {
           </div>
         ))}
       </div>
+
     </div>
   )
 }
