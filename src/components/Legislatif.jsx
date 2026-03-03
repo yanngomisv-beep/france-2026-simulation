@@ -141,7 +141,6 @@ function BarreProba({ pct_base, pct_bonus, bonusVoteActif }) {
           }`}
           style={{ width: `${Math.min(100, pct_bonus)}%` }}
         />
-        {/* Ligne seuil 50% */}
         <div className="absolute top-0 bottom-0 w-0.5 bg-white opacity-40"
           style={{ left: '50%' }} />
       </div>
@@ -151,7 +150,6 @@ function BarreProba({ pct_base, pct_bonus, bonusVoteActif }) {
         <span>100%</span>
       </div>
 
-      {/* Comparaison avant/après bonus */}
       {bonusVoteActif > 0 && (
         <>
           <div className="flex justify-between text-xs border-t border-slate-700 pt-2 mt-1">
@@ -191,8 +189,6 @@ function CarteLevier({ levier, etatJeu, usage49_3, onAppliquer, loiCiblee }) {
         ? 'border-slate-700 bg-slate-800 opacity-50'
         : 'border-slate-600 bg-slate-800 hover:border-slate-500'
     }`}>
-
-      {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-lg">{levier.emoji}</span>
@@ -212,7 +208,6 @@ function CarteLevier({ levier, etatJeu, usage49_3, onAppliquer, loiCiblee }) {
 
       <p className="text-xs text-slate-500">{levier.description}</p>
 
-      {/* Effets */}
       <div className="flex flex-wrap gap-1">
         {Object.entries(levier.effet).map(([k, v]) => (
           <div key={k} className="bg-slate-900 rounded px-1.5 py-1 flex gap-1 items-center">
@@ -234,33 +229,28 @@ function CarteLevier({ levier, etatJeu, usage49_3, onAppliquer, loiCiblee }) {
         )}
       </div>
 
-      {/* Risque */}
       {levier.risque && (
         <p className="text-xs text-yellow-600">⚠️ {levier.risque}</p>
       )}
 
-      {/* Compteur 49.3 */}
       {levier.id === 'art_49_3' && (
         <p className="text-xs text-slate-600">
           Utilisé : {usage49_3}/{levier.usage_max} fois ce mandat
         </p>
       )}
 
-      {/* Bouton */}
       <button
         disabled={desactive}
         onClick={() => onAppliquer(levier)}
         className={`w-full py-1.5 rounded-lg text-white text-xs font-semibold border transition-colors ${
-          desactive
-            ? 'bg-slate-700 border-slate-600 cursor-not-allowed'
-            : c.btn
+          desactive ? 'bg-slate-700 border-slate-600 cursor-not-allowed' : c.btn
         }`}
       >
-        {bloque          ? '🔒 Épuisé' :
-         pasAssezBudget  ? '💸 Budget insuffisant' :
-         levier.id === 'attendre'   ? '⏭️ Passer le tour' :
-         levier.id === 'art_49_3'  ? (loiCiblee ? `⚠️ Forcer "${loiCiblee.titre.substring(0, 20)}..."` : '⚠️ Sélectionnez une loi') :
-         levier.id === 'art_50_1'  ? (loiCiblee ? `🗣️ Débattre de "${loiCiblee.titre.substring(0, 20)}..."` : '🗣️ Sélectionnez une loi') :
+        {bloque         ? '🔒 Épuisé' :
+         pasAssezBudget ? '💸 Budget insuffisant' :
+         levier.id === 'attendre'  ? '⏭️ Passer le tour' :
+         levier.id === 'art_49_3' ? (loiCiblee ? `⚠️ Forcer "${loiCiblee.titre.substring(0, 18)}..."` : '⚠️ Sélectionnez une loi') :
+         levier.id === 'art_50_1' ? (loiCiblee ? `🗣️ Débattre de "${loiCiblee.titre.substring(0, 15)}..."` : '🗣️ Sélectionnez une loi') :
          'Appliquer'}
       </button>
     </div>
@@ -277,7 +267,10 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
   const [bonusVoteActif, setBonusVoteActif] = useState(0)
   const [notifications, setNotifications] = useState([])
 
-  const loisDispo = etatJeu ? getLoisDisponibles(etatJeu) : []
+  // Lois disponibles — on exclut celles déjà adoptées
+  const loisDispo = etatJeu
+    ? getLoisDisponibles(etatJeu).filter(l => !etatJeu.lois_votees?.includes(l.id))
+    : []
 
   function afficherNotif(type, msg) {
     setNotifications([{ type, msg }])
@@ -287,22 +280,24 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
   // ── Appliquer un levier ──────────────────────────────────
   function appliquerLevier(levier) {
 
-    // 49.3 — forçage
+    // 49.3 — forçage sans vote
     if (levier.id === 'art_49_3') {
       if (!loiSelectionnee) {
         afficherNotif('warning', "⚠️ Sélectionnez d'abord une loi à forcer.")
         return
       }
-      voterLoi(loiSelectionnee.id)
+      // On passe 100 comme bonus pour forcer l'adoption
+      voterLoi(loiSelectionnee.id, 100)
       setUsage49_3(u => u + 1)
       setLoiSelectionnee(null)
+      setBonusVoteActif(0)
       afficherNotif('danger',
         `⚖️ 49.3 activé — "${loiSelectionnee.titre}" forcée. Motion de censure probable.`
       )
       return
     }
 
-    // 50.1 — débat sans vote
+    // 50.1 — débat sans vote, bonus seulement
     if (levier.id === 'art_50_1') {
       if (!loiSelectionnee) {
         afficherNotif('warning', "⚠️ Sélectionnez d'abord une loi à débattre.")
@@ -322,7 +317,7 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
       return
     }
 
-    // Autres leviers avec bonus vote
+    // Leviers avec bonus vote
     if (levier.bonus_vote) {
       setBonusVoteActif(b => b + levier.bonus_vote)
     }
@@ -338,9 +333,9 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
     )
   }
 
-  // ── Voter une loi ────────────────────────────────────────
+  // ── Voter une loi avec le bonus actif ────────────────────
   function handleVoterLoi(loiId) {
-    voterLoi(loiId)
+    voterLoi(loiId, bonusVoteActif)  // ← bonus transmis au moteur
     setBonusVoteActif(0)
     setLoiSelectionnee(null)
   }
@@ -392,7 +387,6 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
           </div>
         )}
 
-        {/* Cartes leviers */}
         {LEVIERS.map(levier => (
           <CarteLevier
             key={levier.id}
@@ -426,7 +420,7 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
       <div className="xl:col-span-2 flex flex-col gap-4">
         <h2 className="text-lg font-bold text-white">📜 Propositions de loi</h2>
 
-        {loisDispo.filter(l => !etatJeu?.lois_votees?.includes(l.id)).length === 0 && (
+        {loisDispo.length === 0 && (
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-8 text-center">
             <p className="text-slate-500 text-sm">Aucune loi disponible.</p>
             <p className="text-slate-600 text-xs mt-1">
@@ -435,134 +429,130 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
           </div>
         )}
 
-        {loisDispo
-          .filter(l => !etatJeu?.lois_votees?.includes(l.id))
-          .map(loi => {
-            const selectionnee = loiSelectionnee?.id === loi.id
-            const { pct_base, pct_bonus } = calculerProbaVote(
-              loi,
-              etatJeu?.hemicycle,
-              bonusVoteActif
-            )
+        {loisDispo.map(loi => {
+          const selectionnee = loiSelectionnee?.id === loi.id
+          const { pct_base, pct_bonus } = calculerProbaVote(
+            loi,
+            etatJeu?.hemicycle,
+            bonusVoteActif
+          )
 
-            return (
-              <div
-                key={loi.id}
-                onClick={() => setLoiSelectionnee(selectionnee ? null : loi)}
-                className={`rounded-xl border p-4 cursor-pointer transition-all ${
-                  selectionnee
-                    ? 'border-blue-500 bg-slate-700'
-                    : 'border-slate-700 bg-slate-800 hover:border-slate-500'
-                }`}
-              >
-                {/* En-tête */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1">
-                    <span className="text-2xl">{loi.emoji}</span>
-                    <div className="flex-1">
-                      <p className="font-semibold text-white">{loi.titre}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{loi.description}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span className="text-xs text-slate-600 bg-slate-900 px-2 py-0.5 rounded">
-                      {loi.bloc}
-                    </span>
-                    {/* Badge probabilité toujours visible */}
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                      pct_bonus > 50
-                        ? 'bg-green-900 text-green-300'
-                        : 'bg-red-900 text-red-300'
-                    }`}>
-                      {pct_bonus}%
-                    </span>
+          return (
+            <div
+              key={loi.id}
+              onClick={() => setLoiSelectionnee(selectionnee ? null : loi)}
+              className={`rounded-xl border p-4 cursor-pointer transition-all ${
+                selectionnee
+                  ? 'border-blue-500 bg-slate-700'
+                  : 'border-slate-700 bg-slate-800 hover:border-slate-500'
+              }`}
+            >
+              {/* En-tête */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 flex-1">
+                  <span className="text-2xl">{loi.emoji}</span>
+                  <div className="flex-1">
+                    <p className="font-semibold text-white">{loi.titre}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{loi.description}</p>
                   </div>
                 </div>
-
-                {/* Détail si sélectionnée */}
-                {selectionnee && (
-                  <>
-                    {/* Barre de probabilité */}
-                    <div className="mt-4">
-                      <BarreProba
-                        pct_base={pct_base}
-                        pct_bonus={pct_bonus}
-                        bonusVoteActif={bonusVoteActif}
-                      />
-                    </div>
-
-                    {/* Impacts */}
-                    {loi.impacts && Object.keys(loi.impacts).length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-slate-600">
-                        {Object.entries(loi.impacts).map(([k, v]) => (
-                          <div key={k} className="bg-slate-900 rounded px-2 py-1.5 flex flex-col items-center">
-                            <span className="text-slate-500" style={{ fontSize: '10px' }}>
-                              {k.replace(/_/g, ' ')}
-                            </span>
-                            <Delta
-                              valeur={v}
-                              unite={k === 'deficit_milliards' ? ' Md€' : '%'}
-                              inverse={['deficit_milliards', 'tension_sociale', 'inflation_pct'].includes(k)}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Partis pour/contre */}
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-green-900/30 rounded p-2">
-                        <p className="text-green-400 font-semibold mb-1">✅ Pour</p>
-                        {loi.partis_favorables?.map(p => (
-                          <span key={p} className="inline-block text-green-300 mr-1">{p}</span>
-                        ))}
-                      </div>
-                      <div className="bg-red-900/30 rounded p-2">
-                        <p className="text-red-400 font-semibold mb-1">❌ Contre</p>
-                        {loi.partis_hostiles?.map(p => (
-                          <span key={p} className="inline-block text-red-300 mr-1">{p}</span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Événements secondaires */}
-                    {loi.evenements_secondaires?.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {loi.evenements_secondaires.map((e, i) => (
-                          <span key={i} className="text-xs bg-slate-900 text-yellow-400 px-2 py-0.5 rounded">
-                            ⚡ {e}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Bouton voter */}
-                    <button
-                      onClick={e => { e.stopPropagation(); handleVoterLoi(loi.id) }}
-                      className={`mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm transition-colors ${
-                        pct_bonus > 50
-                          ? 'bg-blue-600 hover:bg-blue-500'
-                          : 'bg-slate-600 hover:bg-slate-500'
-                      }`}
-                    >
-                      🗳️ Soumettre au vote — {pct_bonus}%
-                      {bonusVoteActif > 0 && (
-                        <span className="ml-2 text-xs opacity-75">
-                          (+{bonusVoteActif}% bonus)
-                        </span>
-                      )}
-                    </button>
-                  </>
-                )}
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-xs text-slate-600 bg-slate-900 px-2 py-0.5 rounded">
+                    {loi.bloc}
+                  </span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                    pct_bonus > 50
+                      ? 'bg-green-900 text-green-300'
+                      : 'bg-red-900 text-red-300'
+                  }`}>
+                    {pct_bonus}%
+                  </span>
+                </div>
               </div>
-            )
-          })}
+
+              {/* Détail si sélectionnée */}
+              {selectionnee && (
+                <>
+                  {/* Barre probabilité */}
+                  <div className="mt-4">
+                    <BarreProba
+                      pct_base={pct_base}
+                      pct_bonus={pct_bonus}
+                      bonusVoteActif={bonusVoteActif}
+                    />
+                  </div>
+
+                  {/* Impacts */}
+                  {loi.impacts && Object.keys(loi.impacts).length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-slate-600">
+                      {Object.entries(loi.impacts).map(([k, v]) => (
+                        <div key={k} className="bg-slate-900 rounded px-2 py-1.5 flex flex-col items-center">
+                          <span className="text-slate-500" style={{ fontSize: '10px' }}>
+                            {k.replace(/_/g, ' ')}
+                          </span>
+                          <Delta
+                            valeur={v}
+                            unite={k === 'deficit_milliards' ? ' Md€' : '%'}
+                            inverse={['deficit_milliards', 'tension_sociale', 'inflation_pct'].includes(k)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Partis pour/contre */}
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-green-900/30 rounded p-2">
+                      <p className="text-green-400 font-semibold mb-1">✅ Pour</p>
+                      {loi.partis_favorables?.map(p => (
+                        <span key={p} className="inline-block text-green-300 mr-1">{p}</span>
+                      ))}
+                    </div>
+                    <div className="bg-red-900/30 rounded p-2">
+                      <p className="text-red-400 font-semibold mb-1">❌ Contre</p>
+                      {loi.partis_hostiles?.map(p => (
+                        <span key={p} className="inline-block text-red-300 mr-1">{p}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Événements secondaires */}
+                  {loi.evenements_secondaires?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {loi.evenements_secondaires.map((e, i) => (
+                        <span key={i} className="text-xs bg-slate-900 text-yellow-400 px-2 py-0.5 rounded">
+                          ⚡ {e}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bouton voter */}
+                  <button
+                    onClick={e => { e.stopPropagation(); handleVoterLoi(loi.id) }}
+                    className={`mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm transition-colors ${
+                      pct_bonus > 50
+                        ? 'bg-blue-600 hover:bg-blue-500'
+                        : 'bg-slate-600 hover:bg-slate-500'
+                    }`}
+                  >
+                    🗳️ Soumettre au vote — {pct_bonus}%
+                    {bonusVoteActif > 0 && (
+                      <span className="ml-2 text-xs opacity-75">
+                        (+{bonusVoteActif}% bonus inclus)
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* ══ Colonne droite — État + Conseil ══ */}
       <div className="xl:col-span-1 flex flex-col gap-4">
 
-        {/* Indicateurs */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col gap-2.5">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
             État de la République
@@ -612,15 +602,15 @@ export default function Legislatif({ etatJeu, voterLoi, passerTour }) {
             {!etatJeu
               ? 'Chargement...'
               : etatJeu.popularite_joueur < 35
-              ? "Popularité trop basse. Lancez une campagne ou utilisez le 50.1 pour débattre sans risque avant de voter."
+              ? "Popularité trop basse. Lancez une campagne ou utilisez le 50.1 pour débattre sans risque."
               : etatJeu.tension_sociale > 65
-              ? "Tensions sociales élevées. Évitez absolument le 49.3 — préférez la négociation ou le 50.1."
+              ? "Tensions élevées. Évitez le 49.3 — préférez la négociation ou le 50.1."
               : etatJeu.reserve_budgetaire_milliards < 10
               ? "Réserves quasi vides. Votez d'abord des lois qui réduisent le déficit."
               : etatJeu.dissimulation > 55
-              ? "Dissimulation dangereuse. Évitez le lobbying médiatique — un scandale peut éclater."
+              ? "Dissimulation dangereuse. Évitez le lobbying — un scandale peut éclater."
               : bonusVoteActif > 0
-              ? `Bonus de +${bonusVoteActif}% actif. Profitez-en pour voter une loi difficile !`
+              ? `Bonus de +${bonusVoteActif}% actif — profitez-en pour voter une loi difficile !`
               : "Situation stable. C'est le bon moment pour pousser vos réformes."}
           </p>
         </div>
