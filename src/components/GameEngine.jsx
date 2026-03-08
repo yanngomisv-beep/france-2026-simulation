@@ -3,7 +3,7 @@ import { soumettreLoiAuVote, getLoisDisponibles } from '../engines/moteur-legisl
 import { tourIA }             from '../engines/moteur-ia-partis.js'
 import { tourMoteurVNU }      from '../engines/moteur-vnu.js'
 import { tourGeopolitique }   from '../engines/moteur-geopolitique.js'
-import { tourScandales }      from '../engines/moteur-scandales.js'
+import { tourMoteurScandales } from '../engines/moteur-scandales.js'
 import {
   getCurseursInitiaux,
   genererReformesTour,
@@ -120,10 +120,10 @@ export default function GameEngine({ partiJoueur, children }) {
 
       // Moteur scandales
       try {
-        const r = tourScandales(etat)
-        if (r?.etat) etat = { ...etat, ...r.etat }
-        if (r?.evenements?.length) evs.push(...r.evenements)
-      } catch (e) { console.warn('tourScandales:', e.message) }
+  const r = tourMoteurScandales(etat)
+  if (r?.etat) etat = { ...etat, ...r.etat }
+  if (r?.evenements?.length) evs.push(...r.evenements)
+} catch (e) { console.warn('tourMoteurScandales:', e.message) }
 
       // Dérive naturelle
       etat.popularite_joueur = Math.max(0, Math.min(100,
