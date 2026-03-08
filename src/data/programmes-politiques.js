@@ -20,7 +20,7 @@ export const PARTIS_JOUABLES = [
     popularite_base: 38,
     tension_base: 55,
     deficit_base: 173,
-    partis_allies: [ 'DLF'],
+    partis_allies: ['PATRIOTES', 'DLF'],
     partis_hostiles: ['LFI', 'PS', 'EELV', 'PCF', 'LO'],
     programme: {
       economie: [
@@ -907,4 +907,65 @@ export const PARTIS_JOUABLES = [
         'Flat tax à 15% sur tous les revenus',
         'Suppression de 200 000 postes de fonctionnaires en 5 ans',
         'Réforme de l\'État : décentralisation massive',
-        'Liberté totale d
+        'Liberté totale d\'entreprendre : suppression des autorisations préalables',
+        'Déficit interdit constitutionnellement',
+        'Privatisation de France Télévisions et Radio France',
+      ],
+      social: [
+        'Retraite par capitalisation individuelle',
+        'Chèque éducation : liberté de choix de l\'école',
+        'Assurance chômage privée et facultative',
+        'Responsabilité individuelle valorisée',
+        'Aide sociale ciblée et conditionnée',
+      ],
+      securite: [
+        'Tolérance zéro : application stricte des peines',
+        'Privatisation partielle des prisons',
+        'Justice rapide : tribunaux spécialisés',
+        'Décentralisation de la sécurité aux maires',
+      ],
+      immigration: [
+        'Immigration sélective par points (modèle canadien)',
+        'Fin de l\'immigration familiale automatique',
+        'Intégration par le mérite',
+      ],
+      energie: [
+        'Marché de l\'énergie totalement libéralisé',
+        'Nucléaire privé : fin du monopole d\'EDF',
+        'Renouvelables sans subventions',
+        'Prix de l\'énergie fixé par le marché',
+      ],
+      europe: [
+        'Europe libérale et compétitive',
+        'Marché unique renforcé',
+        'Moins de régulation européenne',
+        'Subsidiarité maximale',
+      ],
+    },
+  },
+]
+
+export function getParti(id) {
+  return PARTIS_JOUABLES.find(p => p.id === id) ?? null
+}
+
+export function getEtatInitialParti(partiId) {
+  const parti = getParti(partiId)
+  if (!parti) return null
+  return {
+    parti_joueur: partiId,
+    leader: parti.leader,
+    popularite_joueur: parti.popularite_base,
+    tension_sociale: parti.tension_base,
+    deficit_milliards: parti.deficit_base,
+    stabilite: 58,
+    reserve_budgetaire_milliards: 28,
+    prix_baril: 80,
+    prix_electricite: 72,
+    prix_gaz: 38,
+    relation_ue: 20,
+    inflation_pct: 2.8,
+    date: '1er Mars 2026',
+    tour: 1,
+  }
+}
