@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react'
 import { soumettreLoiAuVote, getLoisDisponibles } from '../engines/moteur-legislatif.js'
-import { tourIA, calculerReactionsIA }            from '../engines/moteur-ia-partis.js'
-import { tourVNU }                                from '../engines/moteur-vnu.js'
-import { tourGeopolitique }                       from '../engines/moteur-geopolitique.js'
-import { tourScandales }                          from '../engines/moteur-scandales.js'
+import { tourIA }            from '../engines/moteur-ia-partis.js'
+import { tourVNU }           from '../engines/moteur-vnu.js'
+import { tourGeopolitique }  from '../engines/moteur-geopolitique.js'
+import { tourScandales }     from '../engines/moteur-scandales.js'
 import {
   getCurseursInitiaux,
   genererReformesTour,
