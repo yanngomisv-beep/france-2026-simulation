@@ -25,40 +25,23 @@ const MOIS = [
 ]
 
 const ETAT_GEO_INITIAL = {
-  tension_iran: 45,
-  tension_russie: 62,
-  tension_chine: 30,
-  tension_usa: 15,
-  tension_afrique_sahel: 58,
-  mer_rouge_ouverte: true,
-  jours_fermeture_mer_rouge: 0,
-  cohesion_otan: 72,
-  contribution_france_otan_pct: 2.1,
-  relation_allemagne: 65,
-  relation_usa: 55,
-  relation_russie: -40,
-  relation_chine: 20,
-  relation_maroc: 30,
-  relation_algerie: 15,
-  taux_oat_10ans_pct: 3.2,
-  spread_allemagne_pts: 65,
-  notation_moodys: "Aa2",
-  notation_sp: "AA-",
-  prime_risque: 1.2,
-  niveau_ingérence_russe: 35,
-  niveau_ingérence_chinoise: 20,
-  cyber_incidents_mois: 2,
-  cyber_protection: 50,
-  procedures_infraction: 0,
-  amendes_ue_milliards: 0,
-  conformite_pacte_stabilite: true,
-  indice_souverainete: 58,
+  tension_iran: 45, tension_russie: 62, tension_chine: 30,
+  tension_usa: 15, tension_afrique_sahel: 58,
+  mer_rouge_ouverte: true, jours_fermeture_mer_rouge: 0,
+  cohesion_otan: 72, contribution_france_otan_pct: 2.1,
+  relation_allemagne: 65, relation_usa: 55, relation_russie: -40,
+  relation_chine: 20, relation_maroc: 30, relation_algerie: 15,
+  taux_oat_10ans_pct: 3.2, spread_allemagne_pts: 65,
+  notation_moodys: "Aa2", notation_sp: "AA-", prime_risque: 1.2,
+  niveau_ingérence_russe: 35, niveau_ingérence_chinoise: 20,
+  cyber_incidents_mois: 2, cyber_protection: 50,
+  procedures_infraction: 0, amendes_ue_milliards: 0,
+  conformite_pacte_stabilite: true, indice_souverainete: 58,
 }
 
 function getEtatBase(partiId) {
   const etatParti = getEtatInitialParti(partiId)
   return {
-    // Défauts
     popularite_joueur: 42,
     tension_sociale: 45,
     deficit_milliards: 173,
@@ -77,12 +60,11 @@ function getEtatBase(partiId) {
     date: '1er Mars 2026',
     tour: 1,
     hemicycle: { ...HEMICYCLE_INITIAL },
-    lois_votees: [],
+    lois_votees: [],        // ← tableau des IDs de lois adoptées
     scandales_actifs: [],
     dissimulation: 0,
     pression_mediatique: 0,
     parti_joueur: partiId,
-    // VNU / Énergie
     affectation_vnu: {
       bouclier_menages_pct: 0,
       subvention_industrie_pct: 0,
@@ -102,22 +84,22 @@ function getEtatBase(partiId) {
     dependance_gaz_etranger_pct: 72,
     part_nucleaire_mix_pct: 68,
     part_renouvelable_mix_pct: 24,
-    // Override avec données du parti choisi
     ...(etatParti ?? {}),
+    lois_votees: [], // toujours un tableau vide au départ même si etatParti en a
   }
 }
 
 export default function GameEngine({ partiJoueur, children }) {
-  const [etatJeu, setEtatJeu]           = useState(() => getEtatBase(partiJoueur ?? 'HORIZONS'))
-  const [etatGeo, setEtatGeo]           = useState(() => ({ ...ETAT_GEO_INITIAL }))
-  const [curseurs, setCurseurs]         = useState(() => getCurseursInitiaux(partiJoueur ?? 'HORIZONS'))
-  const [evenements, setEvenements]     = useState([])
-  const [reformesTour, setReformesTour] = useState([])
-  const [crisesActives, setCrisesActives]   = useState([])
+  const [etatJeu, setEtatJeu]             = useState(() => getEtatBase(partiJoueur ?? 'HORIZONS'))
+  const [etatGeo, setEtatGeo]             = useState(() => ({ ...ETAT_GEO_INITIAL }))
+  const [curseurs, setCurseurs]           = useState(() => getCurseursInitiaux(partiJoueur ?? 'HORIZONS'))
+  const [evenements, setEvenements]       = useState([])
+  const [reformesTour, setReformesTour]   = useState([])
+  const [crisesActives, setCrisesActives] = useState([])
   const [crisesResolues, setCrisesResolues] = useState([])
-  const [loading, setLoading]           = useState(false)
+  const [loading, setLoading]             = useState(false)
 
-  // ── Passer un tour ───────────────────────────────────────
+  // ── Passer un tour ─────────────────────────────────────
   const passerTour = useCallback(() => {
     setLoading(true)
     const evs = []
@@ -190,22 +172,22 @@ export default function GameEngine({ partiJoueur, children }) {
         ((etat.deficit_milliards ?? 173) / 2800) * 100 * 10
       ) / 10
 
-      // ── Tour suivant + date ──
+      // ── Incrémenter tour + date ──
       const tourSuivant = (etat.tour ?? 1) + 1
       const idx = (tourSuivant - 1) % 12
       const an  = 2026 + Math.floor((tourSuivant - 1) / 12)
       etat.tour = tourSuivant
       etat.date = `1er ${MOIS[idx]} ${an}`
 
+      // Préserver lois_votees
+      etat.lois_votees = prev.lois_votees ?? []
+
       return etat
     })
 
     setEvenements(evs)
-
-    // Micro-réformes
     setReformesTour(genererReformesTour(curseurs))
 
-    // Crise potentielle
     setEtatJeu(prev => {
       const crise = calculerCrisePotentielle(
         curseurs, prev.tension_sociale ?? 45, crisesResolues
@@ -217,17 +199,15 @@ export default function GameEngine({ partiJoueur, children }) {
     setLoading(false)
   }, [curseurs, crisesResolues, etatGeo])
 
-  // ── Voter une loi ────────────────────────────────────────
+  // ── Voter une loi ──────────────────────────────────────
   const voterLoi = useCallback((loiId, bonusVote = 0) => {
     setEtatJeu(prev => {
       try {
         const res = soumettreLoiAuVote(loiId, prev, prev.hemicycle, bonusVote)
         if (!res) return prev
-        return {
-          ...prev,
-          ...(res.etat ?? {}),
-          lois_votees: res.lois_votees ?? prev.lois_votees,
-        }
+        // res.etat contient déjà lois_votees mis à jour
+        if (res.etat) return res.etat
+        return prev
       } catch (e) {
         console.warn('voterLoi:', e.message)
         return prev
@@ -235,7 +215,7 @@ export default function GameEngine({ partiJoueur, children }) {
     })
   }, [])
 
-  // ── Résoudre une crise ───────────────────────────────────
+  // ── Résoudre une crise ─────────────────────────────────
   const resoudreCrise = useCallback((crise) => {
     setEtatJeu(prev => {
       let e = { ...prev }
@@ -248,26 +228,26 @@ export default function GameEngine({ partiJoueur, children }) {
     setCrisesResolues(r => [...r, crise.id])
   }, [])
 
-  // ── Déplacer un curseur ──────────────────────────────────
+  // ── Déplacer un curseur ────────────────────────────────
   const deplacerCurseurJoueur = useCallback((axe, delta) => {
     setCurseurs(prev => deplacerCurseur(prev, axe, delta))
   }, [])
 
-  // ── Barre de statut ──────────────────────────────────────
+  // ── Stats barre de statut ──────────────────────────────
   const stats = [
     { label: '❤️', val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,
       color: (etatJeu.popularite_joueur ?? 42) > 40 ? 'text-green-400' : 'text-red-400' },
-    { label: '⚡ Tension', val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
+    { label: '⚡', val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
       color: (etatJeu.tension_sociale ?? 45) > 60 ? 'text-red-400' : 'text-yellow-400' },
-    { label: '💰 Déficit', val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
+    { label: '💰', val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
       color: (etatJeu.deficit_milliards ?? 173) > 200 ? 'text-red-400' : 'text-slate-300' },
-    { label: '📊 PIB', val: `${etatJeu.deficit_pib_pct ?? 5.5}%`,
+    { label: '📊', val: `${etatJeu.deficit_pib_pct ?? 5.5}%`,
       color: (etatJeu.deficit_pib_pct ?? 5.5) > 5 ? 'text-red-400' : 'text-green-400' },
-    { label: '🇪🇺 UE', val: `${Math.round(etatJeu.relation_ue ?? 20)}/100`,
+    { label: '🇪🇺', val: `${Math.round(etatJeu.relation_ue ?? 20)}`,
       color: (etatJeu.relation_ue ?? 20) < 20 ? 'text-red-400' : 'text-slate-300' },
     { label: '🛢️', val: `${etatJeu.prix_baril_dollars ?? 80}$`,
       color: (etatJeu.prix_baril_dollars ?? 80) > 100 ? 'text-red-400' : 'text-slate-300' },
-    { label: '⚡ Élec', val: `${Math.round(etatJeu.prix_electricite ?? 72)}€`,
+    { label: '⚡', val: `${Math.round(etatJeu.prix_electricite ?? 72)}€`,
       color: (etatJeu.prix_electricite ?? 72) > 110 ? 'text-red-400' : 'text-slate-300' },
     { label: '📅', val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`,
       color: 'text-slate-400' },
@@ -294,7 +274,7 @@ export default function GameEngine({ partiJoueur, children }) {
       {/* Barre de statut */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center gap-4 flex-wrap text-xs overflow-x-auto">
         {stats.map(s => (
-          <div key={s.label} className="flex items-center gap-1.5 flex-shrink-0">
+          <div key={s.label + s.val} className="flex items-center gap-1.5 flex-shrink-0">
             <span className="text-slate-500">{s.label}</span>
             <span className={`font-bold ${s.color}`}>{s.val}</span>
           </div>
@@ -339,11 +319,10 @@ export default function GameEngine({ partiJoueur, children }) {
               : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg'
           }`}
         >
-          {loading ? '⏳ En cours...' : '⏭️ Tour suivant'}
+          {loading ? '⏳...' : '⏭️ Tour suivant'}
         </button>
       </div>
 
-      {/* Notifications */}
       <NotifReformes
         reformes={reformesTour}
         crises={crisesActives}
