@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react'
 import { soumettreLoiAuVote, getLoisDisponibles } from '../engines/moteur-legislatif.js'
-import { tourIA }             from '../engines/moteur-ia-partis.js'
-import { tourMoteurVNU }      from '../engines/moteur-vnu.js'
-import { tourGeopolitique }   from '../engines/moteur-geopolitique.js'
-import { tourMoteurScandales } from '../engines/moteur-scandales.js'
+import { tourIA }                  from '../engines/moteur-ia-partis.js'
+import { tourMoteurVNU }           from '../engines/moteur-vnu.js'
+import { tourMoteurGeopolitique }  from '../engines/moteur-geopolitique.js'
 import {
   getCurseursInitiaux,
   genererReformesTour,
@@ -25,12 +24,45 @@ const MOIS = [
   'Juillet','Août','Septembre','Octobre','Novembre','Décembre'
 ]
 
+const ETAT_GEO_INITIAL = {
+  tension_iran: 45,
+  tension_russie: 62,
+  tension_chine: 30,
+  tension_usa: 15,
+  tension_afrique_sahel: 58,
+  mer_rouge_ouverte: true,
+  jours_fermeture_mer_rouge: 0,
+  cohesion_otan: 72,
+  contribution_france_otan_pct: 2.1,
+  relation_allemagne: 65,
+  relation_usa: 55,
+  relation_russie: -40,
+  relation_chine: 20,
+  relation_maroc: 30,
+  relation_algerie: 15,
+  taux_oat_10ans_pct: 3.2,
+  spread_allemagne_pts: 65,
+  notation_moodys: "Aa2",
+  notation_sp: "AA-",
+  prime_risque: 1.2,
+  niveau_ingérence_russe: 35,
+  niveau_ingérence_chinoise: 20,
+  cyber_incidents_mois: 2,
+  cyber_protection: 50,
+  procedures_infraction: 0,
+  amendes_ue_milliards: 0,
+  conformite_pacte_stabilite: true,
+  indice_souverainete: 58,
+}
+
 function getEtatBase(partiId) {
   const etatParti = getEtatInitialParti(partiId)
   return {
+    // Défauts
     popularite_joueur: 42,
     tension_sociale: 45,
     deficit_milliards: 173,
+    deficit_pib_pct: 5.5,
     stabilite: 58,
     reserve_budgetaire_milliards: 28,
     prix_baril: 80,
@@ -41,6 +73,7 @@ function getEtatBase(partiId) {
     pib_croissance_pct: 0.8,
     indice_confiance_marches: 50,
     consentement_impot: 55,
+    souverainete_energetique: 58,
     date: '1er Mars 2026',
     tour: 1,
     hemicycle: { ...HEMICYCLE_INITIAL },
@@ -49,6 +82,7 @@ function getEtatBase(partiId) {
     dissimulation: 0,
     pression_mediatique: 0,
     parti_joueur: partiId,
+    // VNU / Énergie
     affectation_vnu: {
       bouclier_menages_pct: 0,
       subvention_industrie_pct: 0,
@@ -56,7 +90,6 @@ function getEtatBase(partiId) {
       financement_epr2_pct: 0,
       reserve_pct: 100,
     },
-    // Énergie
     prix_baril_dollars: 80,
     prix_gaz_mwh: 38,
     prix_electricite_marche_mwh: 72,
@@ -69,13 +102,14 @@ function getEtatBase(partiId) {
     dependance_gaz_etranger_pct: 72,
     part_nucleaire_mix_pct: 68,
     part_renouvelable_mix_pct: 24,
-    // Override avec données du parti
+    // Override avec données du parti choisi
     ...(etatParti ?? {}),
   }
 }
 
 export default function GameEngine({ partiJoueur, children }) {
   const [etatJeu, setEtatJeu]           = useState(() => getEtatBase(partiJoueur ?? 'HORIZONS'))
+  const [etatGeo, setEtatGeo]           = useState(() => ({ ...ETAT_GEO_INITIAL }))
   const [curseurs, setCurseurs]         = useState(() => getCurseursInitiaux(partiJoueur ?? 'HORIZONS'))
   const [evenements, setEvenements]     = useState([])
   const [reformesTour, setReformesTour] = useState([])
@@ -90,42 +124,59 @@ export default function GameEngine({ partiJoueur, children }) {
 
     setEtatJeu(prev => {
       let etat = { ...prev }
+      let geo  = { ...etatGeo }
 
-      // Moteur IA partis
+      // ── Moteur IA partis ──
       try {
         const r = tourIA(etat)
         if (r?.etat) etat = { ...etat, ...r.etat }
         if (r?.evenements?.length) evs.push(...r.evenements)
       } catch (e) { console.warn('tourIA:', e.message) }
 
-      // Moteur VNU énergétique
+      // ── Moteur VNU ──
       try {
-        const r = tourMoteurVNU(etat, etat, etat.affectation_vnu)
+        const etatEnergie = {
+          prix_baril_dollars: etat.prix_baril_dollars ?? 80,
+          prix_gaz_mwh: etat.prix_gaz_mwh ?? 38,
+          prix_electricite_marche_mwh: etat.prix_electricite_marche_mwh ?? 72,
+          mer_rouge_fermee: etat.mer_rouge_fermee ?? false,
+          tensions_iran: etat.tensions_iran ?? false,
+          edf_rentable: etat.edf_rentable ?? true,
+          edf_dette_milliards: etat.edf_dette_milliards ?? 54,
+          avancement_epr2_pct: etat.avancement_epr2_pct ?? 12,
+          recettes_vnu_milliards: etat.recettes_vnu_milliards ?? 0,
+        }
+        const r = tourMoteurVNU(etatEnergie, etat, etat.affectation_vnu)
         if (r?.resultat_affectation?.nouvelEtat) {
           etat = { ...etat, ...r.resultat_affectation.nouvelEtat }
         }
-        if (r?.prix_electricite) etat.prix_electricite = r.prix_electricite
-        if (r?.prix_electricite) etat.prix_electricite_marche_mwh = r.prix_electricite
+        if (r?.prix_electricite != null) {
+          etat.prix_electricite = r.prix_electricite
+          etat.prix_electricite_marche_mwh = r.prix_electricite
+        }
         if (r?.evenements_declenches?.length) {
-          evs.push(...r.evenements_declenches.map(e => ({ titre: e.titre, emoji: e.emoji })))
+          evs.push(...r.evenements_declenches.map(e => ({
+            titre: e.titre, emoji: e.emoji ?? '⚡'
+          })))
         }
       } catch (e) { console.warn('tourMoteurVNU:', e.message) }
 
-      // Moteur géopolitique
+      // ── Moteur géopolitique ──
       try {
-        const r = tourGeopolitique(etat)
-        if (r?.etat) etat = { ...etat, ...r.etat }
-        if (r?.evenements?.length) evs.push(...r.evenements)
-      } catch (e) { console.warn('tourGeopolitique:', e.message) }
+        const r = tourMoteurGeopolitique(geo, etat)
+        if (r?.nouvelEtatJeu) etat = { ...etat, ...r.nouvelEtatJeu }
+        if (r?.nouvelEtatGeo) {
+          geo = r.nouvelEtatGeo
+          setEtatGeo(geo)
+        }
+        if (r?.evenements_declenches?.length) {
+          evs.push(...r.evenements_declenches.map(e => ({
+            titre: e.titre, emoji: e.theatre_emoji ?? '🌍'
+          })))
+        }
+      } catch (e) { console.warn('tourMoteurGeopolitique:', e.message) }
 
-      // Moteur scandales
-      try {
-  const r = tourMoteurScandales(etat)
-  if (r?.etat) etat = { ...etat, ...r.etat }
-  if (r?.evenements?.length) evs.push(...r.evenements)
-} catch (e) { console.warn('tourMoteurScandales:', e.message) }
-
-      // Dérive naturelle
+      // ── Dérive naturelle ──
       etat.popularite_joueur = Math.max(0, Math.min(100,
         (etat.popularite_joueur ?? 42) - 0.5
       ))
@@ -135,8 +186,11 @@ export default function GameEngine({ partiJoueur, children }) {
       etat.stabilite = Math.max(0, Math.min(100,
         (etat.popularite_joueur ?? 42) - ((etat.tension_sociale ?? 45) / 10)
       ))
+      etat.deficit_pib_pct = Math.round(
+        ((etat.deficit_milliards ?? 173) / 2800) * 100 * 10
+      ) / 10
 
-      // Tour suivant + date
+      // ── Tour suivant + date ──
       const tourSuivant = (etat.tour ?? 1) + 1
       const idx = (tourSuivant - 1) % 12
       const an  = 2026 + Math.floor((tourSuivant - 1) / 12)
@@ -148,25 +202,20 @@ export default function GameEngine({ partiJoueur, children }) {
 
     setEvenements(evs)
 
-    // Micro-réformes automatiques selon curseurs
-    const reformes = genererReformesTour(curseurs)
-    setReformesTour(reformes)
+    // Micro-réformes
+    setReformesTour(genererReformesTour(curseurs))
 
     // Crise potentielle
     setEtatJeu(prev => {
       const crise = calculerCrisePotentielle(
-        curseurs,
-        prev.tension_sociale ?? 45,
-        crisesResolues
+        curseurs, prev.tension_sociale ?? 45, crisesResolues
       )
-      if (crise) {
-        setCrisesActives(c => [...c.filter(x => x.id !== crise.id), crise])
-      }
+      if (crise) setCrisesActives(c => [...c.filter(x => x.id !== crise.id), crise])
       return prev
     })
 
     setLoading(false)
-  }, [curseurs, crisesResolues])
+  }, [curseurs, crisesResolues, etatGeo])
 
   // ── Voter une loi ────────────────────────────────────────
   const voterLoi = useCallback((loiId, bonusVote = 0) => {
@@ -204,47 +253,29 @@ export default function GameEngine({ partiJoueur, children }) {
     setCurseurs(prev => deplacerCurseur(prev, axe, delta))
   }, [])
 
-  // ── Statistiques barre de statut ─────────────────────────
+  // ── Barre de statut ──────────────────────────────────────
   const stats = [
-    {
-      label: '❤️ Popularité',
-      val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,
-      color: (etatJeu.popularite_joueur ?? 42) > 40 ? 'text-green-400' : 'text-red-400',
-    },
-    {
-      label: '⚡ Tension',
-      val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
-      color: (etatJeu.tension_sociale ?? 45) > 60 ? 'text-red-400' : 'text-yellow-400',
-    },
-    {
-      label: '💰 Déficit',
-      val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
-      color: (etatJeu.deficit_milliards ?? 173) > 200 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: '🇪🇺 UE',
-      val: `${Math.round(etatJeu.relation_ue ?? 20)}/100`,
-      color: (etatJeu.relation_ue ?? 20) < 20 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: '🛢️ Baril',
-      val: `${etatJeu.prix_baril_dollars ?? etatJeu.prix_baril ?? 80}$`,
-      color: (etatJeu.prix_baril_dollars ?? 80) > 100 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: '⚡ Élec',
-      val: `${Math.round(etatJeu.prix_electricite ?? 72)}€/MWh`,
-      color: (etatJeu.prix_electricite ?? 72) > 110 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: '📅',
-      val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`,
-      color: 'text-slate-300',
-    },
+    { label: '❤️', val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,
+      color: (etatJeu.popularite_joueur ?? 42) > 40 ? 'text-green-400' : 'text-red-400' },
+    { label: '⚡ Tension', val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
+      color: (etatJeu.tension_sociale ?? 45) > 60 ? 'text-red-400' : 'text-yellow-400' },
+    { label: '💰 Déficit', val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
+      color: (etatJeu.deficit_milliards ?? 173) > 200 ? 'text-red-400' : 'text-slate-300' },
+    { label: '📊 PIB', val: `${etatJeu.deficit_pib_pct ?? 5.5}%`,
+      color: (etatJeu.deficit_pib_pct ?? 5.5) > 5 ? 'text-red-400' : 'text-green-400' },
+    { label: '🇪🇺 UE', val: `${Math.round(etatJeu.relation_ue ?? 20)}/100`,
+      color: (etatJeu.relation_ue ?? 20) < 20 ? 'text-red-400' : 'text-slate-300' },
+    { label: '🛢️', val: `${etatJeu.prix_baril_dollars ?? 80}$`,
+      color: (etatJeu.prix_baril_dollars ?? 80) > 100 ? 'text-red-400' : 'text-slate-300' },
+    { label: '⚡ Élec', val: `${Math.round(etatJeu.prix_electricite ?? 72)}€`,
+      color: (etatJeu.prix_electricite ?? 72) > 110 ? 'text-red-400' : 'text-slate-300' },
+    { label: '📅', val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`,
+      color: 'text-slate-400' },
   ]
 
   const gameProps = {
     etatJeu,
+    etatGeo,
     curseurs,
     passerTour,
     voterLoi,
@@ -260,7 +291,7 @@ export default function GameEngine({ partiJoueur, children }) {
   return (
     <div className="bg-slate-950 text-white min-h-screen flex flex-col">
 
-      {/* ── Barre de statut ── */}
+      {/* Barre de statut */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center gap-4 flex-wrap text-xs overflow-x-auto">
         {stats.map(s => (
           <div key={s.label} className="flex items-center gap-1.5 flex-shrink-0">
@@ -268,34 +299,31 @@ export default function GameEngine({ partiJoueur, children }) {
             <span className={`font-bold ${s.color}`}>{s.val}</span>
           </div>
         ))}
-
-        {/* Curseurs en barre */}
+        {/* Curseurs */}
         <div className="flex items-center gap-3 ml-auto flex-wrap">
           {Object.entries(AXES).map(([axe, info]) => (
             <div key={axe} className="flex items-center gap-1">
-              <span className="text-slate-600 text-xs">{info.label}</span>
+              <span className="text-slate-600">{info.label}</span>
               <div className="w-14 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
+                <div className="h-full rounded-full transition-all"
                   style={{
                     width: `${curseurs[axe] ?? 50}%`,
                     backgroundColor: getCouleurCurseur(curseurs[axe] ?? 50),
-                  }}
-                />
+                  }} />
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Contenu principal ── */}
+      {/* Contenu */}
       <div className="flex-1 p-4 overflow-auto">
         {children(gameProps)}
       </div>
 
-      {/* ── Barre du bas ── */}
+      {/* Barre bas */}
       <div className="sticky bottom-0 bg-slate-900 border-t border-slate-800 px-4 py-3 flex items-center justify-between gap-4">
-        <div className="flex gap-2 flex-wrap flex-1">
+        <div className="flex gap-2 flex-wrap flex-1 overflow-hidden">
           {evenements.slice(0, 3).map((ev, i) => (
             <span key={i} className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded truncate max-w-xs">
               {ev.emoji ?? '📢'} {ev.titre ?? String(ev)}
@@ -315,7 +343,7 @@ export default function GameEngine({ partiJoueur, children }) {
         </button>
       </div>
 
-      {/* ── Notifications ── */}
+      {/* Notifications */}
       <NotifReformes
         reformes={reformesTour}
         crises={crisesActives}
