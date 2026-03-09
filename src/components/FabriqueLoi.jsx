@@ -1,41 +1,101 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // ─────────────────────────────────────────────────────────────
 // PROFILS SOCIAUX
 // ─────────────────────────────────────────────────────────────
 
 const PROFILS = [
-  { id: 'soignant',   label: 'Soignant',    emoji: '🏥' },
-  { id: 'etudiant',   label: 'Étudiant',    emoji: '🎓' },
-  { id: 'commercant', label: 'Commerçant',  emoji: '🛍️' },
-  { id: 'salarie',    label: 'Salarié / RH',emoji: '💼' },
-  { id: 'juriste',    label: 'Juriste',     emoji: '⚖️' },
-  { id: 'agriculteur',label: 'Agriculteur', emoji: '🌾' },
-  { id: 'retraite',   label: 'Retraité',    emoji: '👴' },
-  { id: 'btp',        label: 'BTP',         emoji: '🏗️' },
-  { id: 'numerique',  label: 'Numérique',   emoji: '💻' },
-  { id: 'industrie',  label: 'Industrie',   emoji: '🏭' },
+  { id: 'soignant',    label: 'Soignant',     emoji: '🏥' },
+  { id: 'etudiant',    label: 'Étudiant',     emoji: '🎓' },
+  { id: 'commercant',  label: 'Commerçant',   emoji: '🛍️' },
+  { id: 'salarie',     label: 'Salarié / RH', emoji: '💼' },
+  { id: 'juriste',     label: 'Juriste',      emoji: '⚖️' },
+  { id: 'agriculteur', label: 'Agriculteur',  emoji: '🌾' },
+  { id: 'retraite',    label: 'Retraité',     emoji: '👴' },
+  { id: 'btp',         label: 'BTP',          emoji: '🏗️' },
+  { id: 'numerique',   label: 'Numérique',    emoji: '💻' },
+  { id: 'industrie',   label: 'Industrie',    emoji: '🏭' },
 ]
-
-// ─────────────────────────────────────────────────────────────
-// 10 SCÉNARIOS TYPES
-// ─────────────────────────────────────────────────────────────
 
 const SCENARIOS_TYPES = [
-  { emoji: '🏥', label: 'Ségur 2.0',             texte: 'Augmentation de 500€ net pour tous les paramédicaux et fermeture des cliniques privées ne participant pas aux gardes.' },
-  { emoji: '🏥', label: 'Déserts médicaux',       texte: "Obligation pour tout nouveau médecin de s'installer 3 ans en zone sous-dense sous peine de non-remboursement par la CPAM." },
+  { emoji: '🏥', label: 'Ségur 2.0',              texte: 'Augmentation de 500€ net pour tous les paramédicaux et fermeture des cliniques privées ne participant pas aux gardes.' },
+  { emoji: '🏥', label: 'Déserts médicaux',        texte: "Obligation pour tout nouveau médecin de s'installer 3 ans en zone sous-dense sous peine de non-remboursement par la CPAM." },
   { emoji: '🛡️', label: 'Bouclier de proximité',  texte: "Création de polices municipales renforcées sous autorité des maires pour pallier le manque d'effectifs de la Police Nationale." },
-  { emoji: '🛡️', label: 'Surveillance IA',        texte: 'Généralisation de la reconnaissance faciale dans les transports pour identifier les personnes fichées S.' },
-  { emoji: '⚖️', label: 'Verdict rapide',          texte: 'Suppression du jury populaire pour les délits financiers afin de diviser par deux les délais de jugement.' },
-  { emoji: '⚖️', label: 'Responsabilité parentale',texte: 'Suppression des allocations familiales et amendes pour les parents de mineurs récidivistes.' },
-  { emoji: '💼', label: 'Semaine 4 jours',         texte: 'Passage à 32h payées 35h pour les métiers à forte pénibilité, financé par une taxe sur les dividendes.' },
-  { emoji: '💼', label: 'Revenu Jeunes',           texte: "Versement de 800€/mois pour tous les 18-25 ans sans ressources, conditionné à une formation ou un service civique." },
-  { emoji: '🎓', label: 'Uniforme républicain',    texte: "Obligation du port de l'uniforme dans tous les collèges et lycées publics, financé par l'État." },
-  { emoji: '🎓', label: 'Sélection post-bac',      texte: 'Remplacement de Parcoursup par un concours national d\'entrée pour chaque filière universitaire.' },
+  { emoji: '🛡️', label: 'Surveillance IA',         texte: 'Généralisation de la reconnaissance faciale dans les transports pour identifier les personnes fichées S.' },
+  { emoji: '⚖️', label: 'Verdict rapide',           texte: 'Suppression du jury populaire pour les délits financiers afin de diviser par deux les délais de jugement.' },
+  { emoji: '⚖️', label: 'Responsabilité parentale', texte: 'Suppression des allocations familiales et amendes pour les parents de mineurs récidivistes.' },
+  { emoji: '💼', label: 'Semaine 4 jours',          texte: 'Passage à 32h payées 35h pour les métiers à forte pénibilité, financé par une taxe sur les dividendes.' },
+  { emoji: '💼', label: 'Revenu Jeunes',            texte: "Versement de 800€/mois pour tous les 18-25 ans sans ressources, conditionné à une formation ou un service civique." },
+  { emoji: '🎓', label: 'Uniforme républicain',     texte: "Obligation du port de l'uniforme dans tous les collèges et lycées publics, financé par l'État." },
+  { emoji: '🎓', label: 'Sélection post-bac',       texte: "Remplacement de Parcoursup par un concours national d'entrée pour chaque filière universitaire." },
 ]
 
 // ─────────────────────────────────────────────────────────────
-// PROMPT SYSTÈME
+// CONFIG OLLAMA
+// ─────────────────────────────────────────────────────────────
+
+const OLLAMA_URL   = 'http://localhost:11434'
+const OLLAMA_MODEL = 'gemma2:9b'
+
+// ─────────────────────────────────────────────────────────────
+// DÉTECTION OLLAMA
+// ─────────────────────────────────────────────────────────────
+
+async function detecterOllama() {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, {
+      signal: AbortSignal.timeout(1500),
+    })
+    if (!res.ok) return false
+    const data = await res.json()
+    // Vérifie que gemma2:9b est bien téléchargé
+    return data.models?.some(m => m.name?.startsWith('gemma2'))
+  } catch {
+    return false
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// APPEL OLLAMA
+// ─────────────────────────────────────────────────────────────
+
+async function appelOllama(prompt) {
+  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      prompt,
+      stream: false,
+      options: { temperature: 0.7, num_predict: 2000 },
+    }),
+  })
+  if (!res.ok) throw new Error(`Ollama erreur ${res.status}`)
+  const data = await res.json()
+  return data.response ?? ''
+}
+
+// ─────────────────────────────────────────────────────────────
+// APPEL ANTHROPIC (via proxy Vercel)
+// ─────────────────────────────────────────────────────────────
+
+async function appelAnthropic(prompt) {
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error?.message ?? `Erreur ${res.status}`)
+  return data.content.filter(b => b.type === 'text').map(b => b.text).join('')
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROMPT
 // ─────────────────────────────────────────────────────────────
 
 function construirePrompt(intention, etatJeu) {
@@ -100,10 +160,25 @@ Génère UNIQUEMENT un objet JSON valide (sans balises markdown, sans texte avan
 // SOUS-COMPOSANTS
 // ─────────────────────────────────────────────────────────────
 
-function BadgeImpact({ valeur, unite = '', inverse = false }) {
-  if (valeur === 0 || valeur === undefined) return (
-    <span className="text-xs text-slate-500">—</span>
+function BadgeSource({ source }) {
+  return (
+    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+      source === 'ollama'
+        ? 'bg-purple-900/60 border border-purple-700/50 text-purple-300'
+        : source === 'anthropic'
+        ? 'bg-blue-900/60 border border-blue-700/50 text-blue-300'
+        : 'bg-slate-800 border border-slate-700 text-slate-400'
+    }`}>
+      {source === 'ollama'    && <><span>🟣</span><span>Gemma 2 local</span></>}
+      {source === 'anthropic' && <><span>🔵</span><span>Claude Sonnet</span></>}
+      {source === 'detection' && <><span className="animate-pulse">⚪</span><span>Détection...</span></>}
+      {!source                && <><span>⚪</span><span>IA non connectée</span></>}
+    </div>
   )
+}
+
+function BadgeImpact({ valeur, unite = '', inverse = false }) {
+  if (valeur === 0 || valeur === undefined) return <span className="text-xs text-slate-500">—</span>
   const positif = inverse ? valeur < 0 : valeur > 0
   return (
     <span className={`text-sm font-bold ${positif ? 'text-green-400' : 'text-red-400'}`}>
@@ -119,7 +194,6 @@ function CarteProfilImpact({ profil, data }) {
     neutre:  'border-slate-600 bg-slate-800',
   }
   const icones = { positif: '✅', negatif: '❌', neutre: '➖' }
-
   return (
     <div className={`rounded-lg border p-3 flex flex-col gap-1 ${couleurs[data.impact]}`}>
       <div className="flex items-center gap-2">
@@ -139,7 +213,6 @@ function CartePartiReaction({ nom, data }) {
     abstention: 'bg-slate-700 border-slate-600 text-slate-300',
   }
   const icones = { pour: '✅', contre: '❌', abstention: '🤷' }
-
   return (
     <div className={`rounded-lg border px-3 py-2 flex flex-col gap-1 ${couleurs[data.position]}`}>
       <div className="flex items-center justify-between">
@@ -153,14 +226,10 @@ function CartePartiReaction({ nom, data }) {
 
 function BadgeRisque({ niveau, label }) {
   const styles = {
-    aucun:         'bg-green-900 text-green-300',
-    conforme:      'bg-green-900 text-green-300',
-    faible:        'bg-yellow-900 text-yellow-300',
-    risque_faible: 'bg-yellow-900 text-yellow-300',
-    moyen:         'bg-orange-900 text-orange-300',
-    risque_moyen:  'bg-orange-900 text-orange-300',
-    eleve:         'bg-red-900 text-red-300',
-    risque_eleve:  'bg-red-900 text-red-300',
+    aucun: 'bg-green-900 text-green-300', conforme: 'bg-green-900 text-green-300',
+    faible: 'bg-yellow-900 text-yellow-300', risque_faible: 'bg-yellow-900 text-yellow-300',
+    moyen: 'bg-orange-900 text-orange-300', risque_moyen: 'bg-orange-900 text-orange-300',
+    eleve: 'bg-red-900 text-red-300', risque_eleve: 'bg-red-900 text-red-300',
   }
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-semibold ${styles[niveau] ?? 'bg-slate-700 text-slate-300'}`}>
@@ -171,15 +240,11 @@ function BadgeRisque({ niveau, label }) {
 
 function BadgeCout({ niveau }) {
   const styles = {
-    gratuit:    'bg-green-900 text-green-300',
-    faible:     'bg-green-800 text-green-300',
-    modere:     'bg-yellow-900 text-yellow-300',
-    eleve:      'bg-orange-900 text-orange-300',
+    gratuit: 'bg-green-900 text-green-300', faible: 'bg-green-800 text-green-300',
+    modere: 'bg-yellow-900 text-yellow-300', eleve: 'bg-orange-900 text-orange-300',
     tres_eleve: 'bg-red-900 text-red-300',
   }
-  const emojis = {
-    gratuit: '💚', faible: '🟢', modere: '🟡', eleve: '🟠', tres_eleve: '🔴'
-  }
+  const emojis = { gratuit: '💚', faible: '🟢', modere: '🟡', eleve: '🟠', tres_eleve: '🔴' }
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-semibold ${styles[niveau] ?? 'bg-slate-700 text-slate-300'}`}>
       {emojis[niveau] ?? '⚪'} Coût : {niveau?.replace(/_/g, ' ')}
@@ -197,11 +262,22 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
   const [erreur, setErreur]         = useState(null)
   const [loiGeneree, setLoiGeneree] = useState(null)
   const [adoptee, setAdoptee]       = useState(false)
+  const [source, setSource]         = useState(null)     // 'ollama' | 'anthropic' | null
+  const [ollamaDisponible, setOllamaDisponible] = useState(null) // null = pas encore vérifié
 
-  // ── Appel via proxy Vercel ───────────────────────────────
+  // ── Détection Ollama au montage ──────────────────────────
+  useEffect(() => {
+    setSource('detection')
+    detecterOllama().then(dispo => {
+      setOllamaDisponible(dispo)
+      setSource(dispo ? 'ollama' : 'anthropic')
+    })
+  }, [])
+
+  // ── Génération avec fallback auto ────────────────────────
   async function genererLoi() {
     if (!intention.trim() || intention.length < 10) {
-      setErreur("Décrivez votre intention en au moins 10 caractères.")
+      setErreur('Décrivez votre intention en au moins 10 caractères.')
       return
     }
     setLoading(true)
@@ -209,31 +285,28 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     setLoiGeneree(null)
     setAdoptee(false)
 
+    const prompt = construirePrompt(intention, etatJeu)
+    let texte = ''
+    let sourceUtilisee = 'anthropic'
+
     try {
-      const response = await fetch('/api/claude', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: construirePrompt(intention, etatJeu),
-          }],
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error?.message ?? `Erreur ${response.status}`)
+      if (ollamaDisponible) {
+        // Essai Ollama d'abord
+        try {
+          texte = await appelOllama(prompt)
+          sourceUtilisee = 'ollama'
+        } catch (errOllama) {
+          console.warn('Ollama indisponible, bascule sur Anthropic :', errOllama.message)
+          texte = await appelAnthropic(prompt)
+          sourceUtilisee = 'anthropic'
+          setOllamaDisponible(false)
+        }
+      } else {
+        texte = await appelAnthropic(prompt)
+        sourceUtilisee = 'anthropic'
       }
 
-      const texte = data.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('')
-
+      setSource(sourceUtilisee)
       const loi = JSON.parse(texte.replace(/```json|```/g, '').trim())
       setLoiGeneree(loi)
     } catch (e) {
@@ -244,10 +317,17 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     }
   }
 
-  // ── Valider la loi ───────────────────────────────────────
   function adopterLoi() {
     if (!loiGeneree) return
     setAdoptee(true)
+  }
+
+  // ── Retenter la détection manuellement ──────────────────
+  async function retenterDetection() {
+    setSource('detection')
+    const dispo = await detecterOllama()
+    setOllamaDisponible(dispo)
+    setSource(dispo ? 'ollama' : 'anthropic')
   }
 
   const INDICATEURS = [
@@ -265,17 +345,59 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     <div className="max-w-6xl mx-auto flex flex-col gap-6 pb-12">
 
       {/* En-tête */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-xl font-bold text-white">⚗️ Fabrique de loi</h2>
           <p className="text-sm text-slate-400 mt-1">
             Exprimez votre intention en langage naturel — l'IA la transforme en projet de loi.
           </p>
         </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400">
-          🏛️ {etatJeu?.date ?? 'Mars 2026'}
+        <div className="flex items-center gap-2">
+          <BadgeSource source={source} />
+          {/* Bouton retenter si Ollama non détecté */}
+          {source === 'anthropic' && ollamaDisponible === false && (
+            <button
+              onClick={retenterDetection}
+              className="text-xs text-slate-500 hover:text-slate-300 underline transition-colors"
+            >
+              Relancer Ollama ?
+            </button>
+          )}
+          <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400">
+            🏛️ {etatJeu?.date ?? 'Mars 2026'}
+          </div>
         </div>
       </div>
+
+      {/* Bannière Ollama détecté */}
+      {ollamaDisponible === true && (
+        <div className="bg-purple-950/40 border border-purple-700/40 rounded-lg px-4 py-2.5 flex items-center gap-3">
+          <span className="text-purple-400">🟣</span>
+          <div>
+            <p className="text-xs font-semibold text-purple-300">Ollama détecté — Gemma 2 9B actif</p>
+            <p className="text-xs text-slate-500">L'IA tourne localement sur votre machine. Aucune donnée envoyée en ligne.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Bannière Ollama non disponible */}
+      {ollamaDisponible === false && (
+        <div className="bg-slate-800/60 border border-slate-700/40 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">⚪</span>
+            <div>
+              <p className="text-xs font-semibold text-slate-300">Ollama non détecté — Claude Sonnet actif</p>
+              <p className="text-xs text-slate-500">
+                Pour utiliser Gemma 2 en local : installez Ollama sur <span className="text-blue-400">ollama.com</span> puis <code className="bg-slate-700 px-1 rounded">ollama pull gemma2:9b</code>
+              </p>
+            </div>
+          </div>
+          <button onClick={retenterDetection}
+            className="flex-shrink-0 text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">
+            🔄 Vérifier
+          </button>
+        </div>
+      )}
 
       {/* Saisie */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 flex flex-col gap-4">
@@ -292,13 +414,11 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
           rows={4}
         />
 
-        {/* Scénarios types */}
         <div>
           <p className="text-xs text-slate-500 mb-2">💡 Scénarios types — cliquez pour pré-remplir :</p>
           <div className="flex flex-wrap gap-2">
             {SCENARIOS_TYPES.map((s, i) => (
-              <button key={i}
-                onClick={() => setIntention(s.texte)}
+              <button key={i} onClick={() => setIntention(s.texte)}
                 className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors">
                 {s.emoji} {s.label}
               </button>
@@ -307,9 +427,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         </div>
 
         {erreur && (
-          <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded p-2">
-            ⚠️ {erreur}
-          </p>
+          <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded p-2">⚠️ {erreur}</p>
         )}
 
         <button
@@ -318,12 +436,14 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
           className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
             loading || intention.trim().length < 10
               ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white'
+              : source === 'ollama'
+                ? 'bg-purple-700 hover:bg-purple-600 text-white'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
           }`}
         >
           {loading
-            ? '⚙️ Le Conseil Juridique analyse votre proposition...'
-            : '🏛️ Soumettre au Conseil Juridique'}
+            ? `⚙️ ${source === 'ollama' ? 'Gemma 2 analyse' : 'Claude analyse'} votre proposition...`
+            : `🏛️ Soumettre au Conseil Juridique ${source === 'ollama' ? '(local)' : '(cloud)'}`}
         </button>
       </div>
 
@@ -331,31 +451,27 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
       {loiGeneree && !adoptee && (
         <div className="flex flex-col gap-5">
 
-          {/* Titre + exposé */}
           <div className="bg-slate-800 rounded-xl border border-blue-800 p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <p className="text-xs text-blue-400 uppercase tracking-wide mb-1">
-                  Projet de loi généré
-                </p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs text-blue-400 uppercase tracking-wide">Projet de loi généré</p>
+                  <BadgeSource source={source} />
+                </div>
                 <h3 className="text-xl font-bold text-white">{loiGeneree.titre_officiel}</h3>
               </div>
               <div className="flex flex-col gap-1.5 items-end flex-shrink-0">
                 <BadgeCout niveau={loiGeneree.cout_budgetaire} />
                 <div className="flex gap-1 flex-wrap justify-end">
                   {loiGeneree.tags?.map(t => (
-                    <span key={t} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
-                      #{t}
-                    </span>
+                    <span key={t} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">#{t}</span>
                   ))}
                 </div>
               </div>
             </div>
-
             <p className="text-sm text-slate-300 italic border-l-2 border-blue-600 pl-4 mb-4">
               {loiGeneree.expose_motifs}
             </p>
-
             <div className="flex flex-col gap-1.5">
               {loiGeneree.articles?.map((art, i) => (
                 <p key={i} className="text-xs text-slate-400 bg-slate-900 rounded p-2">{art}</p>
@@ -363,24 +479,18 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
             </div>
           </div>
 
-          {/* Impacts variables */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
             <h4 className="font-semibold text-white mb-4">📊 Impacts sur la République</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {INDICATEURS.map(({ key, label, unite, inverse }) => (
                 <div key={key} className="bg-slate-900 rounded-lg p-3 flex flex-col gap-1">
                   <p className="text-xs text-slate-500">{label}</p>
-                  <BadgeImpact
-                    valeur={loiGeneree.impacts?.[key] ?? 0}
-                    unite={unite}
-                    inverse={inverse}
-                  />
+                  <BadgeImpact valeur={loiGeneree.impacts?.[key] ?? 0} unite={unite} inverse={inverse} />
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Profils sociaux */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
             <h4 className="font-semibold text-white mb-4">👥 Impact par profil social</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -392,7 +502,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
             </div>
           </div>
 
-          {/* Réactions partis */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
             <h4 className="font-semibold text-white mb-4">🗣️ Réactions des partis</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -400,81 +509,54 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
                 <CartePartiReaction key={nom} nom={nom} data={data} />
               ))}
             </div>
-
             {loiGeneree.amendement_rn && (
               <div className="mt-3 bg-blue-900/20 border border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-400 font-semibold mb-1">
-                  📋 Amendement déposé par le RN
-                </p>
+                <p className="text-xs text-blue-400 font-semibold mb-1">📋 Amendement déposé par le RN</p>
                 <p className="text-xs text-slate-300">{loiGeneree.amendement_rn}</p>
               </div>
             )}
           </div>
 
-          {/* Risques */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
             <h4 className="font-semibold text-white mb-3">⚠️ Risques juridiques</h4>
             <div className="flex flex-wrap gap-2 mb-3">
-              <BadgeRisque
-                niveau={loiGeneree.risques?.conseil_constitutionnel ?? 'aucun'}
-                label="Conseil Constitutionnel"
-              />
-              <BadgeRisque
-                niveau={loiGeneree.risques?.conformite_ue ?? 'conforme'}
-                label="Conformité UE"
-              />
+              <BadgeRisque niveau={loiGeneree.risques?.conseil_constitutionnel ?? 'aucun'} label="Conseil Constitutionnel" />
+              <BadgeRisque niveau={loiGeneree.risques?.conformite_ue ?? 'conforme'} label="Conformité UE" />
             </div>
-            {loiGeneree.risques?.detail_cc && (
-              <p className="text-xs text-slate-400 mb-1">⚖️ {loiGeneree.risques.detail_cc}</p>
-            )}
-            {loiGeneree.risques?.detail_ue && (
-              <p className="text-xs text-slate-400">🇪🇺 {loiGeneree.risques.detail_ue}</p>
-            )}
+            {loiGeneree.risques?.detail_cc && <p className="text-xs text-slate-400 mb-1">⚖️ {loiGeneree.risques.detail_cc}</p>}
+            {loiGeneree.risques?.detail_ue && <p className="text-xs text-slate-400">🇪🇺 {loiGeneree.risques.detail_ue}</p>}
           </div>
 
-          {/* Boutons */}
           <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={adopterLoi}
-              className="flex-1 py-3 bg-green-700 hover:bg-green-600 text-white font-bold rounded-xl text-sm transition-colors"
-            >
+            <button onClick={adopterLoi}
+              className="flex-1 py-3 bg-green-700 hover:bg-green-600 text-white font-bold rounded-xl text-sm transition-colors">
               ✅ Valider et soumettre au vote de l'Assemblée
             </button>
-            <button
-              onClick={() => { setLoiGeneree(null); setIntention('') }}
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm transition-colors"
-            >
+            <button onClick={() => { setLoiGeneree(null); setIntention('') }}
+              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm transition-colors">
               🗑️ Abandonner
             </button>
-            <button
-              onClick={genererLoi}
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm transition-colors"
-            >
+            <button onClick={genererLoi}
+              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm transition-colors">
               🔄 Régénérer
             </button>
           </div>
         </div>
       )}
 
-      {/* Confirmation adoption */}
       {adoptee && loiGeneree && (
         <div className="bg-green-900/30 border border-green-700 rounded-xl p-8 text-center flex flex-col gap-4">
           <span className="text-5xl">🏛️</span>
-          <h3 className="text-xl font-bold text-green-300">
-            "{loiGeneree.titre_officiel}" soumise à l'Assemblée
-          </h3>
+          <h3 className="text-xl font-bold text-green-300">"{loiGeneree.titre_officiel}" soumise à l'Assemblée</h3>
           <p className="text-sm text-slate-400">
             Le projet de loi est en cours d'examen. Les partis adverses ont 24h pour déposer leurs amendements.
           </p>
-          <button
-            onClick={() => { setLoiGeneree(null); setIntention(''); setAdoptee(false) }}
-            className="mx-auto px-8 py-2.5 bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg text-sm transition-colors"
-          >
+          <button onClick={() => { setLoiGeneree(null); setIntention(''); setAdoptee(false) }}
+            className="mx-auto px-8 py-2.5 bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg text-sm transition-colors">
             ⚗️ Proposer une nouvelle loi
           </button>
         </div>
       )}
-
     </div>
   )
 }
