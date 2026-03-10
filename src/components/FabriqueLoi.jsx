@@ -1,20 +1,5 @@
 import { useState, useEffect } from 'react'
-
-// ─────────────────────────────────────────────────────────────
-// COMPOSITION DU SÉNAT (fixe 2026, modifiable par événements)
-// ─────────────────────────────────────────────────────────────
-export const SENAT_INITIAL = {
-  LR:     148,
-  UC:      56, // Union Centriste (alliés LR)
-  RDPI:    23, // Groupe Renaissance
-  INDEP:   16,
-  SER:     64, // Socialistes et Républicains
-  CRCE:    17, // Communistes
-  GEST:    17, // Gauche environnement solidarités
-  RN:       4,
-  DIVERS:   1,
-  total:  346,
-}
+import { SENAT_INITIAL } from './GameEngine'
 
 // ─────────────────────────────────────────────────────────────
 // PROFILS SOCIAUX
@@ -201,7 +186,6 @@ Génère UNIQUEMENT un objet JSON valide (sans balises markdown, sans texte avan
 // UTILITAIRE SÉNAT
 // ─────────────────────────────────────────────────────────────
 function calculerMajoriteSenat(senat) {
-  // Groupes tendanciellement favorables à une révision de centre-droit
   const favorables = (senat.LR ?? 0) + (senat.UC ?? 0) + (senat.RDPI ?? 0) + (senat.INDEP ?? 0)
   const total = senat.total ?? 346
   return { favorables, total, majorite: favorables > total / 2 }
@@ -630,7 +614,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi, senat: senatProp }) {
 
   function adopterLoi() {
     if (!loiGeneree) return
-    if (voterLoi) voterLoi(loiGeneree?.titre_officiel ?? 'custom', 0)
+    if (voterLoi) voterLoi(loiGeneree?.titre_officiel ?? 'custom', 0, { titre: loiGeneree.titre_officiel, bloc: 'custom' })
     setAdoptee(true)
   }
 
@@ -711,49 +695,63 @@ export default function FabriqueLoi({ etatJeu, voterLoi, senat: senatProp }) {
           <div className="flex items-center gap-3">
             <span className="text-slate-500">⚪</span>
             <div>
-              <p className="text-xs font-semibold text-slate-300">Ollama non détecté — Claude Sonnet actif</p>
-              <p className="text-xs text-slate-500">
-                Pour Gemma 3 en local : <span className="text-blue-400">ollama.com</span> puis <code className="bg-slate-700 px-1 rounded">ollama pull gemma3:12b</code>
-              </p>
+              <p className="text-xs font-semibold text-slate-400">Ollama non détecté — Claude Sonnet actif</p>
+              <p className="text-xs text-slate-600">Les requêtes passent par le proxy Vercel.</p>
             </div>
           </div>
-          <button onClick={retenterDetection} className="flex-shrink-0 text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">
-            🔄 Vérifier
-          </button>
         </div>
       )}
 
-      {/* ── Saisie ── */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 flex flex-col gap-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-lg">✍️</span>
-          <h3 className="font-semibold text-white">Votre intention politique</h3>
+      {/* ── Lois votées ── */}
+      {(etatJeu?.lois_votees ?? []).length > 0 && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 flex flex-col gap-2">
+          <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">📚 Lois déjà adoptées ({etatJeu.lois_votees.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {etatJeu.lois_votees.map((l, i) => (
+              <span key={i} className="text-xs bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-600">
+                {l.titre ?? l.id}
+              </span>
+            ))}
+          </div>
         </div>
-        <textarea
-          value={intention}
-          onChange={e => setIntention(e.target.value)}
-          placeholder="Exemple : Je veux obliger les cliniques privées à participer aux gardes de nuit, ou augmenter le SMIC à 1700€ en compensant les PME via une exonération de charges..."
-          className="w-full bg-slate-900 border border-slate-600 rounded-lg p-4 text-white text-sm placeholder-slate-500 resize-none focus:outline-none focus:border-blue-500 transition-colors"
-          rows={4}
-        />
+      )}
+
+      {/* ── Saisie intention ── */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-5 flex flex-col gap-4">
         <div>
-          <p className="text-xs text-slate-500 mb-2">💡 Scénarios types :</p>
+          <label className="text-sm font-semibold text-white mb-2 block">
+            Votre intention législative
+          </label>
+          <textarea
+            value={intention}
+            onChange={e => setIntention(e.target.value)}
+            placeholder="Ex : Je veux obliger les médecins à s'installer en zone rurale pendant au moins 3 ans..."
+            rows={3}
+            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-blue-500 transition-colors"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-slate-500">{intention.length} caractères — minimum 10</p>
+            {erreur && <p className="text-xs text-red-400">{erreur}</p>}
+          </div>
+        </div>
+
+        {/* Suggestions */}
+        <div>
+          <p className="text-xs text-slate-500 mb-2">Suggestions :</p>
           <div className="flex flex-wrap gap-2">
             {SCENARIOS_TYPES.map((s, i) => (
               <button key={i} onClick={() => setIntention(s.texte)}
-                className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors">
-                {s.emoji} {s.label}
+                className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                <span>{s.emoji}</span><span>{s.label}</span>
               </button>
             ))}
           </div>
         </div>
-        {erreur && (
-          <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded p-2">⚠️ {erreur}</p>
-        )}
+
         <button
           onClick={genererLoi}
           disabled={loading || intention.trim().length < 10}
-          className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
             loading || intention.trim().length < 10
               ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
               : source === 'ollama' ? 'bg-purple-700 hover:bg-purple-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
