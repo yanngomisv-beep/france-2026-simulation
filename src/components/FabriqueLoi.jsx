@@ -35,7 +35,7 @@ const SCENARIOS_TYPES = [
 // ─────────────────────────────────────────────────────────────
 
 const OLLAMA_URL   = 'http://localhost:11434'
-const OLLAMA_MODEL = 'gemma2:9b'
+const OLLAMA_MODEL = 'gemma3:12b'
 
 // ─────────────────────────────────────────────────────────────
 // DÉTECTION OLLAMA
@@ -48,8 +48,8 @@ async function detecterOllama() {
     })
     if (!res.ok) return false
     const data = await res.json()
-    // Vérifie que gemma2:9b est bien téléchargé
-    return data.models?.some(m => m.name?.startsWith('gemma2'))
+    // Vérifie que gemma3:12b est bien téléchargé
+    return data.models?.some(m => m.name?.startsWith('gemma3'))
   } catch {
     return false
   }
