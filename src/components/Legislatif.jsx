@@ -725,7 +725,7 @@ function PanneauCurseurs({ curseurs, onDeplacer }) {
 // COMPOSANT PRINCIPAL
 // ─────────────────────────────────────────────────────────────
 
-export default function Legislatif({ etatJeu, voterLoi, curseurs, deplacerCurseurJoueur }) {
+export default function Legislatif({ etatJeu, voterLoi, curseurs, deplacerCurseur: deplacerCurseurJoueur }) {
   const [loiSelectionnee, setLoiSelectionnee] = useState(null)
   const [filtreBloc,      setFiltreBloc]      = useState('TOUS')
   const [filtreParti,     setFiltreParti]     = useState('TOUS')
