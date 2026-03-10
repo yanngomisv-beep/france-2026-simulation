@@ -48,7 +48,6 @@ async function detecterOllama() {
     })
     if (!res.ok) return false
     const data = await res.json()
-    // Vérifie que gemma3:12b est bien téléchargé
     return data.models?.some(m => m.name?.startsWith('gemma3'))
   } catch {
     return false
@@ -169,7 +168,7 @@ function BadgeSource({ source }) {
         ? 'bg-blue-900/60 border border-blue-700/50 text-blue-300'
         : 'bg-slate-800 border border-slate-700 text-slate-400'
     }`}>
-      {source === 'ollama'    && <><span>🟣</span><span>Gemma 2 local</span></>}
+      {source === 'ollama'    && <><span>🟣</span><span>Gemma 3 local</span></>}
       {source === 'anthropic' && <><span>🔵</span><span>Claude Sonnet</span></>}
       {source === 'detection' && <><span className="animate-pulse">⚪</span><span>Détection...</span></>}
       {!source                && <><span>⚪</span><span>IA non connectée</span></>}
@@ -262,10 +261,9 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
   const [erreur, setErreur]         = useState(null)
   const [loiGeneree, setLoiGeneree] = useState(null)
   const [adoptee, setAdoptee]       = useState(false)
-  const [source, setSource]         = useState(null)     // 'ollama' | 'anthropic' | null
-  const [ollamaDisponible, setOllamaDisponible] = useState(null) // null = pas encore vérifié
+  const [source, setSource]         = useState(null)
+  const [ollamaDisponible, setOllamaDisponible] = useState(null)
 
-  // ── Détection Ollama au montage ──────────────────────────
   useEffect(() => {
     setSource('detection')
     detecterOllama().then(dispo => {
@@ -274,7 +272,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     })
   }, [])
 
-  // ── Génération avec fallback auto ────────────────────────
   async function genererLoi() {
     if (!intention.trim() || intention.length < 10) {
       setErreur('Décrivez votre intention en au moins 10 caractères.')
@@ -291,7 +288,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
 
     try {
       if (ollamaDisponible) {
-        // Essai Ollama d'abord
         try {
           texte = await appelOllama(prompt)
           sourceUtilisee = 'ollama'
@@ -322,7 +318,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
     setAdoptee(true)
   }
 
-  // ── Retenter la détection manuellement ──────────────────
   async function retenterDetection() {
     setSource('detection')
     const dispo = await detecterOllama()
@@ -354,7 +349,6 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         </div>
         <div className="flex items-center gap-2">
           <BadgeSource source={source} />
-          {/* Bouton retenter si Ollama non détecté */}
           {source === 'anthropic' && ollamaDisponible === false && (
             <button
               onClick={retenterDetection}
@@ -374,7 +368,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
         <div className="bg-purple-950/40 border border-purple-700/40 rounded-lg px-4 py-2.5 flex items-center gap-3">
           <span className="text-purple-400">🟣</span>
           <div>
-            <p className="text-xs font-semibold text-purple-300">Ollama détecté — Gemma 2 9B actif</p>
+            <p className="text-xs font-semibold text-purple-300">Ollama détecté — Gemma 3 12B actif</p>
             <p className="text-xs text-slate-500">L'IA tourne localement sur votre machine. Aucune donnée envoyée en ligne.</p>
           </div>
         </div>
@@ -388,7 +382,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
             <div>
               <p className="text-xs font-semibold text-slate-300">Ollama non détecté — Claude Sonnet actif</p>
               <p className="text-xs text-slate-500">
-                Pour utiliser Gemma 2 en local : installez Ollama sur <span className="text-blue-400">ollama.com</span> puis <code className="bg-slate-700 px-1 rounded">ollama pull gemma2:9b</code>
+                Pour utiliser Gemma 3 en local : installez Ollama sur <span className="text-blue-400">ollama.com</span> puis <code className="bg-slate-700 px-1 rounded">ollama pull gemma3:12b</code>
               </p>
             </div>
           </div>
@@ -442,7 +436,7 @@ export default function FabriqueLoi({ etatJeu, voterLoi }) {
           }`}
         >
           {loading
-            ? `⚙️ ${source === 'ollama' ? 'Gemma 2 analyse' : 'Claude analyse'} votre proposition...`
+            ? `⚙️ ${source === 'ollama' ? 'Gemma 3 analyse' : 'Claude analyse'} votre proposition...`
             : `🏛️ Soumettre au Conseil Juridique ${source === 'ollama' ? '(local)' : '(cloud)'}`}
         </button>
       </div>
