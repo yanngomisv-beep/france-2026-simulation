@@ -153,7 +153,6 @@ function getEtatBase(partiId) {
     relation_ue: 20, inflation_pct: 2.8, pib_croissance_pct: 0.8, indice_confiance_marches: 50,
     consentement_impot: 55, souverainete_energetique: 58, date: '1er Mars 2026', tour: 1,
     hemicycle: { ...HEMICYCLE_INITIAL },
-    lois_votees: [],       // ← tableau des lois adoptées (catalogue + FabriqueLoi)
     scandales_actifs: [],
     dissimulation: 0, pression_mediatique: 0, parti_joueur: partiId,
     affectation_vnu: { bouclier_menages_pct: 0, subvention_industrie_pct: 0, remboursement_dette_pct: 0, financement_epr2_pct: 0, reserve_pct: 100 },
