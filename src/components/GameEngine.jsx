@@ -10,6 +10,7 @@ import {
   deplacerCurseur, AXES, getCouleurCurseur,
 } from '../engines/moteur-curseurs.js'
 import { getEtatInitialParti } from '../data/programmes-politiques.js'
+import { chargerDonneesEnergie } from '../engines/moteur-energie-reel.js'
 import NotifReformes from './NotifReformes.jsx'
 
 // ─────────────────────────────────────────────────────────────
@@ -21,18 +22,9 @@ const HEMICYCLE_INITIAL = {
   LR: 62, PATRIOTES: 18, UPR: 8, RN: 178, ANIMALISTE: 4, DIVERS: 6,
 }
 
-// Composition du Sénat 2026 — fixe par défaut, modifiable par événements
 export const SENAT_INITIAL = {
-  LR:     148,
-  UC:      56, // Union Centriste (alliés LR)
-  RDPI:    23, // Groupe Renaissance au Sénat
-  INDEP:   16,
-  SER:     64, // Socialistes et Républicains
-  CRCE:    17, // Communistes
-  GEST:    17, // Gauche environnement solidarités
-  RN:       4,
-  DIVERS:   1,
-  total:  346,
+  LR: 148, UC: 56, RDPI: 23, INDEP: 16,
+  SER: 64, CRCE: 17, GEST: 17, RN: 4, DIVERS: 1, total: 346,
 }
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
@@ -160,8 +152,13 @@ function getEtatBase(partiId) {
     edf_rentable: true, edf_dette_milliards: 54, avancement_epr2_pct: 12, recettes_vnu_milliards: 0,
     mer_rouge_fermee: false, tensions_iran: false, dependance_gaz_etranger_pct: 72,
     part_nucleaire_mix_pct: 68, part_renouvelable_mix_pct: 24,
+    // Données énergie live (remplies au mount par chargerDonneesEnergie)
+    echanges_frontaliers_mw: null,
+    source_donnees: 'fallback_contextuel',
+    donnees_live: false,
+    timestamp_donnees: null,
     ...(etatParti ?? {}),
-    lois_votees: [],       // ← forcé après le spread pour ne jamais être écrasé par etatParti
+    lois_votees: [],       // forcé après le spread pour ne jamais être écrasé
   }
 }
 
@@ -180,6 +177,36 @@ export default function GameEngine({ partiJoueur, children }) {
   const [crisesResolues, setCrisesResolues] = useState([])
   const [loading, setLoading]               = useState(false)
 
+  // ── Chargement données énergie au démarrage ────────────────
+  useEffect(() => {
+    chargerDonneesEnergie().then(donnees => {
+      setEtatJeu(prev => ({
+        ...prev,
+        prix_baril_dollars:          donnees.prix_baril_dollars,
+        prix_baril:                  donnees.prix_baril_dollars, // alias legacy
+        prix_gaz_mwh:                donnees.prix_gaz_mwh,
+        prix_gaz:                    donnees.prix_gaz_mwh,       // alias legacy
+        prix_electricite_marche_mwh: donnees.prix_electricite_marche_mwh,
+        prix_electricite:            donnees.prix_electricite_marche_mwh,
+        part_nucleaire_mix_pct:      donnees.part_nucleaire_mix_pct,
+        part_renouvelable_mix_pct:   donnees.part_renouvelable_mix_pct,
+        part_gaz_mix_pct:            donnees.part_gaz_mix_pct,
+        part_charbon_mix_pct:        donnees.part_charbon_mix_pct,
+        echanges_frontaliers_mw:     donnees.echanges_frontaliers_mw,
+        source_donnees:              donnees.source_donnees,
+        donnees_live:                donnees.donnees_live,
+        timestamp_donnees:           donnees.timestamp_donnees,
+      }))
+      // Notifier si données live
+      if (donnees.donnees_live) {
+        setEvenements([{
+          emoji: '🔋',
+          titre: `Données énergétiques live chargées — Baril : ${donnees.prix_baril_dollars}$`,
+        }])
+      }
+    })
+  }, []) // une seule fois au mount
+
   // ── Passer un tour ─────────────────────────────────────────
   const passerTour = useCallback(() => {
     setLoading(true)
@@ -196,9 +223,9 @@ export default function GameEngine({ partiJoueur, children }) {
 
       try {
         const etatEnergie = {
-          prix_baril_dollars:          etat.prix_baril_dollars          ?? 80,
-          prix_gaz_mwh:                etat.prix_gaz_mwh                ?? 38,
-          prix_electricite_marche_mwh: etat.prix_electricite_marche_mwh ?? 72,
+          prix_baril_dollars:          etat.prix_baril_dollars          ?? 88,
+          prix_gaz_mwh:                etat.prix_gaz_mwh                ?? 42,
+          prix_electricite_marche_mwh: etat.prix_electricite_marche_mwh ?? 95,
           mer_rouge_fermee:            etat.mer_rouge_fermee             ?? false,
           tensions_iran:               etat.tensions_iran                ?? false,
           edf_rentable:                etat.edf_rentable                 ?? true,
@@ -261,22 +288,15 @@ export default function GameEngine({ partiJoueur, children }) {
 
         const nouvelEtat = { ...res.etat }
 
-        // Si la loi est adoptée, l'enregistrer dans lois_votees
         if (res.adopte !== false) {
-          // Chercher les métadonnées dans le catalogue (lois standard)
           let loiMeta
           try {
             const catalogue = getLoisDisponibles(prev)
             loiMeta = catalogue.find(l => l.id === loiId)
           } catch { /* catalogue inaccessible */ }
 
-          // Fallback pour les lois custom de la FabriqueLoi
           if (!loiMeta) {
-            loiMeta = {
-              id:    loiId,
-              titre: meta.titre ?? loiId,
-              bloc:  meta.bloc  ?? 'custom',
-            }
+            loiMeta = { id: loiId, titre: meta.titre ?? loiId, bloc: meta.bloc ?? 'custom' }
           }
 
           const entree = {
@@ -285,14 +305,11 @@ export default function GameEngine({ partiJoueur, children }) {
             bloc:  loiMeta.bloc  ?? 'custom',
             tour:  prev.tour,
             date:  prev.date,
-            // Métadonnées constitutionnelles si passage en force
             ...(meta.voie_constitutionnelle ? { voie_constitutionnelle: meta.voie_constitutionnelle } : {}),
             ...(meta.risque_fin_partie       ? { risque_fin_partie: true }                           : {}),
           }
-
           nouvelEtat.lois_votees = [...(prev.lois_votees ?? []), entree]
         } else {
-          // Loi rejetée — on préserve lois_votees sans rien ajouter
           nouvelEtat.lois_votees = prev.lois_votees ?? []
         }
 
@@ -323,15 +340,16 @@ export default function GameEngine({ partiJoueur, children }) {
   }, [])
 
   // ── Stats barre du haut ────────────────────────────────────
+  const badgeLive = etatJeu.donnees_live ? '🟢' : '🟡'
   const stats = [
-    { label: '❤️',  val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,        color: (etatJeu.popularite_joueur ?? 42) > 40    ? 'text-emerald-400' : 'text-red-400',   tooltip: 'Popularité du gouvernement. En dessous de 30%, risque de motion de censure.' },
-    { label: '🔥',  val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,        color: (etatJeu.tension_sociale ?? 45) > 60       ? 'text-red-400'     : 'text-amber-400', tooltip: 'Tension sociale. Au-delà de 70 : grève générale possible.' },
-    { label: '💰',  val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,     color: (etatJeu.deficit_milliards ?? 173) > 200   ? 'text-red-400'     : 'text-slate-300', tooltip: 'Déficit budgétaire annuel. Bruxelles exige un retour sous 5% du PIB.' },
+    { label: '❤️',  val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,        color: (etatJeu.popularite_joueur ?? 42) > 40    ? 'text-emerald-400' : 'text-red-400',     tooltip: 'Popularité du gouvernement. En dessous de 30%, risque de motion de censure.' },
+    { label: '🔥',  val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,        color: (etatJeu.tension_sociale ?? 45) > 60       ? 'text-red-400'     : 'text-amber-400',   tooltip: 'Tension sociale. Au-delà de 70 : grève générale possible.' },
+    { label: '💰',  val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,     color: (etatJeu.deficit_milliards ?? 173) > 200   ? 'text-red-400'     : 'text-slate-300',   tooltip: 'Déficit budgétaire annuel. Bruxelles exige un retour sous 5% du PIB.' },
     { label: '📊',  val: `${etatJeu.deficit_pib_pct ?? 5.5}%`,                      color: (etatJeu.deficit_pib_pct ?? 5.5) > 5       ? 'text-red-400'     : 'text-emerald-400', tooltip: 'Déficit / PIB. Seuil UE : 5%. Au-delà, procédure de sanction.' },
-    { label: '🇪🇺', val: `${Math.round(etatJeu.relation_ue ?? 20)}`,                color: (etatJeu.relation_ue ?? 20) < 0            ? 'text-red-400'     : 'text-slate-300', tooltip: "Relations avec Bruxelles. En dessous de 0 : procédure d'infraction possible." },
-    { label: '🛢️', val: `${etatJeu.prix_baril_dollars ?? 80}$`,                    color: (etatJeu.prix_baril_dollars ?? 80) > 100   ? 'text-red-400'     : 'text-slate-300', tooltip: "Prix du baril. Impact direct sur l'inflation." },
-    { label: '⚡',  val: `${Math.round(etatJeu.prix_electricite ?? 72)}€`,          color: (etatJeu.prix_electricite ?? 72) > 110     ? 'text-red-400'     : 'text-slate-300', tooltip: "Prix de l'électricité. VNU activé au-dessus de 110€/MWh." },
-    { label: '📅',  val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`, color: 'text-slate-400',                                                                    tooltip: 'Tour actuel et date.' },
+    { label: '🇪🇺', val: `${Math.round(etatJeu.relation_ue ?? 20)}`,                color: (etatJeu.relation_ue ?? 20) < 0            ? 'text-red-400'     : 'text-slate-300',   tooltip: "Relations avec Bruxelles. En dessous de 0 : procédure d'infraction possible." },
+    { label: '🛢️', val: `${badgeLive} ${etatJeu.prix_baril_dollars ?? 88}$`,       color: (etatJeu.prix_baril_dollars ?? 88) > 100   ? 'text-red-400'     : 'text-slate-300',   tooltip: `Prix du baril Brent. ${etatJeu.donnees_live ? 'Donnée live OilPriceAPI.' : 'Valeur estimée Mars 2026.'} Impact direct sur l'inflation.` },
+    { label: '⚡',  val: `${Math.round(etatJeu.prix_electricite ?? 95)}€`,          color: (etatJeu.prix_electricite ?? 95) > 110     ? 'text-red-400'     : 'text-slate-300',   tooltip: "Prix de l'électricité marché. VNU activé au-dessus de 110€/MWh." },
+    { label: '📅',  val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`, color: 'text-slate-400',                                                                      tooltip: 'Tour actuel et date.' },
   ]
 
   // ── Props transmises aux enfants ───────────────────────────
@@ -339,8 +357,8 @@ export default function GameEngine({ partiJoueur, children }) {
     etatJeu,
     etatGeo,
     curseurs,
-    senat,           // ← composition du Sénat
-    setSenat,        // ← pour les événements qui font évoluer le Sénat
+    senat,
+    setSenat,
     passerTour,
     voterLoi,
     resoudreCrise,
@@ -358,7 +376,7 @@ export default function GameEngine({ partiJoueur, children }) {
         {/* Barre de stats */}
         <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center gap-4 flex-wrap text-xs overflow-x-auto">
           {stats.map(s => (
-            <AnimatedStat key={s.label + s.val} value={s.val} color={s.color} label={s.label} tooltip={s.tooltip} />
+            <AnimatedStat key={s.label} value={s.val} color={s.color} label={s.label} tooltip={s.tooltip} />
           ))}
           <div className="flex items-center gap-3 ml-auto flex-wrap">
             {Object.entries(AXES).map(([axe, info]) => (
