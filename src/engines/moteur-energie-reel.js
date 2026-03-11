@@ -1,27 +1,48 @@
 // src/engines/moteur-energie-reel.js
-// Appelé UNE SEULE FOIS au démarrage du jeu (dans GameEngine useEffect)
-// Peuple etatJeu avec les données réelles, puis la simulation prend le relais
+// Appelé UNE SEULE FOIS au démarrage du jeu (GameEngine useEffect)
+// Peuple etatJeu avec les données réelles ODRÉ éCO2mix, puis la simulation prend le relais
 
 // ─────────────────────────────────────────────────────────────
 // FALLBACKS CONTEXTUELS (Mars 2026, crise iranienne active)
-// Baril autour de 88-90$ — détroit d'Ormuz sous tension
 // ─────────────────────────────────────────────────────────────
-const FALLBACK_ENERGIE = {
+const FALLBACK = {
+  // Prix
   prix_baril_dollars:          88,
   prix_gaz_mwh:                42,
   prix_electricite_marche_mwh: 95,
   prix_electricite:            95,
-  part_nucleaire_mix_pct:      68,
-  part_renouvelable_mix_pct:   22,
-  part_gaz_mix_pct:            6,
-  part_charbon_mix_pct:        1,
-  echanges_frontaliers_mw: {
-    uk: 1200, allemagne: -400, suisse: 1800,
-    italie: 900, espagne: 400, belgique: 100,
-    solde_total: 4000,
+
+  // Mix
+  part_nucleaire_mix_pct:    68,
+  part_renouvelable_mix_pct: 22,
+  part_gaz_mix_pct:           6,
+  part_charbon_mix_pct:       1,
+
+  // Production MW
+  production_mw: {
+    nucleaire_mw:   42000, eolien_mw:      8000,
+    solaire_mw:      1000, hydraulique_mw: 9000,
+    gaz_mw:          4000, charbon_mw:      200,
+    fioul_mw:         100, bioenergies_mw: 1500,
+    total_mw:       65800,
   },
+
+  // Consommation
+  consommation_mw:    62000,
+  prevision_j_mw:     64000,
+  prevision_j1_mw:    63000,
+
+  // CO₂
+  taux_co2_g_kwh: 52,
+
+  // Échanges (positif = export France)
+  echanges_mw: {
+    angleterre: 1200, espagne: 400, italie: 900,
+    suisse: 1800, allemagne_belgique: -400, solde_total: 3900,
+  },
+
   source_donnees: 'fallback_contextuel',
-  donnees_live: false,
+  donnees_live:   false,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -30,29 +51,49 @@ const FALLBACK_ENERGIE = {
 export async function chargerDonneesEnergie() {
   try {
     const res = await fetch('/api/energie', {
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(7000),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
 
-    // Mapper la réponse API vers les champs de etatJeu
+    const live = Object.values(data.source ?? {}).some(s => s === 'ODRE_LIVE' || s === 'oilpriceapi')
+    const eco2mix_live = data.source?.eco2mix === 'ODRE_LIVE'
+
     return {
-      prix_baril_dollars:          data.prix_baril_dollars          ?? FALLBACK_ENERGIE.prix_baril_dollars,
-      prix_gaz_mwh:                data.prix_gaz_mwh                ?? FALLBACK_ENERGIE.prix_gaz_mwh,
-      prix_electricite_marche_mwh: data.prix_electricite_marche_mwh ?? FALLBACK_ENERGIE.prix_electricite_marche_mwh,
-      prix_electricite:            data.prix_electricite_marche_mwh ?? FALLBACK_ENERGIE.prix_electricite,
-      part_nucleaire_mix_pct:      data.mix_energetique?.nucleaire_pct    ?? FALLBACK_ENERGIE.part_nucleaire_mix_pct,
-      part_renouvelable_mix_pct:   data.mix_energetique?.renouvelable_pct ?? FALLBACK_ENERGIE.part_renouvelable_mix_pct,
-      part_gaz_mix_pct:            data.mix_energetique?.gaz_pct          ?? FALLBACK_ENERGIE.part_gaz_mix_pct,
-      part_charbon_mix_pct:        data.mix_energetique?.charbon_pct      ?? FALLBACK_ENERGIE.part_charbon_mix_pct,
-      echanges_frontaliers_mw:     data.echanges_frontaliers_mw           ?? FALLBACK_ENERGIE.echanges_frontaliers_mw,
-      source_donnees:              Object.values(data.source ?? {}).includes('RTE_LIVE') ? 'RTE_LIVE' : 'fallback_contextuel',
-      donnees_live:                Object.values(data.source ?? {}).some(s => s === 'RTE_LIVE' || s === 'oilpriceapi'),
-      timestamp_donnees:           data.timestamp ?? new Date().toISOString(),
+      // ── Prix ───────────────────────────────────────────────
+      prix_baril_dollars:          data.prix_baril_dollars          ?? FALLBACK.prix_baril_dollars,
+      prix_gaz_mwh:                FALLBACK.prix_gaz_mwh,            // pas dans éCO2mix, hardcodé
+      prix_electricite_marche_mwh: FALLBACK.prix_electricite_marche_mwh,
+      prix_electricite:            FALLBACK.prix_electricite,
+
+      // ── Mix % ──────────────────────────────────────────────
+      part_nucleaire_mix_pct:      data.mix_pct?.nucleaire    ?? FALLBACK.part_nucleaire_mix_pct,
+      part_renouvelable_mix_pct:   data.mix_pct?.renouvelable ?? FALLBACK.part_renouvelable_mix_pct,
+      part_gaz_mix_pct:            data.mix_pct?.gaz          ?? FALLBACK.part_gaz_mix_pct,
+      part_charbon_mix_pct:        data.mix_pct?.charbon      ?? FALLBACK.part_charbon_mix_pct,
+
+      // ── Production MW (nouveau — pas dans etatJeu avant) ───
+      production_mw:               eco2mix_live ? data.production : FALLBACK.production_mw,
+
+      // ── Consommation ───────────────────────────────────────
+      consommation_mw:             data.consommation?.realisee_mw  ?? FALLBACK.consommation_mw,
+      prevision_j_mw:              data.consommation?.prevision_j  ?? FALLBACK.prevision_j_mw,
+      prevision_j1_mw:             data.consommation?.prevision_j1 ?? FALLBACK.prevision_j1_mw,
+
+      // ── CO₂ ────────────────────────────────────────────────
+      taux_co2_g_kwh:              data.taux_co2_g_kwh ?? FALLBACK.taux_co2_g_kwh,
+
+      // ── Échanges frontaliers ────────────────────────────────
+      echanges_mw:                 eco2mix_live ? data.echanges_mw : FALLBACK.echanges_mw,
+
+      // ── Méta ───────────────────────────────────────────────
+      source_donnees:              live ? 'ODRE_LIVE' : 'fallback_contextuel',
+      donnees_live:                live,
+      timestamp_donnees:           data.timestamp_eco2mix ?? data.timestamp ?? new Date().toISOString(),
     }
   } catch (e) {
     console.warn('chargerDonneesEnergie — fallback:', e.message)
-    return { ...FALLBACK_ENERGIE, timestamp_donnees: new Date().toISOString() }
+    return { ...FALLBACK, timestamp_donnees: new Date().toISOString() }
   }
 }
 
@@ -60,37 +101,55 @@ export async function chargerDonneesEnergie() {
 // UTILITAIRES D'AFFICHAGE
 // ─────────────────────────────────────────────────────────────
 
-// Résumé lisible pour la barre de stats ou un tooltip
+// Résumé pour tooltip barre de stats
 export function getResumeDonneesEnergie(etatJeu) {
   const live = etatJeu.donnees_live
-  const src  = etatJeu.source_donnees ?? 'fallback'
+  const ts   = etatJeu.timestamp_donnees?.slice(0, 16).replace('T', ' ') ?? ''
   return {
-    badge:   live ? '🟢 Données live' : '🟡 Données estimées',
-    source:  live ? 'RTE + OilPriceAPI' : 'Valeurs contextuelles Mars 2026',
+    badge:   live ? '🟢 Live' : '🟡 Estimé',
+    source:  live ? 'ODRÉ éCO2mix (RTE)' : 'Valeurs contextuelles Mars 2026',
     tooltip: live
-      ? `Mix énergétique et prix mis à jour en temps réel. Dernière MAJ : ${etatJeu.timestamp_donnees?.slice(0,16).replace('T',' ')}`
-      : 'Pas de connexion aux APIs RTE/OilPrice. Les valeurs de départ reflètent la situation géopolitique de Mars 2026 (crise iranienne).',
+      ? `Données réelles RTE — MAJ : ${ts}`
+      : 'ODRÉ non disponible. Valeurs estimées pour Mars 2026 (crise iranienne, Ormuz sous tension).',
   }
 }
 
-// Formater le solde des échanges frontaliers pour l'UI
-export function getResumEchangesFrontaliers(etatJeu) {
-  const e = etatJeu.echanges_frontaliers_mw
+// Résumé échanges frontaliers pour l'UI
+export function getResumeEchanges(etatJeu) {
+  const e = etatJeu.echanges_mw
   if (!e) return null
   const solde = e.solde_total ?? 0
+  const fmt = v => `${v > 0 ? '+' : ''}${(v ?? 0).toLocaleString('fr-FR')} MW`
   return {
     solde_mw:    solde,
     exportateur: solde > 0,
     label:       solde > 0
-      ? `🔋 Export net : +${solde.toLocaleString('fr-FR')} MW`
-      : `⚡ Import net : ${solde.toLocaleString('fr-FR')} MW`,
+      ? `🔋 Export net : ${fmt(solde)}`
+      : `⬇️ Import net : ${fmt(solde)}`,
     detail: [
-      e.uk         != null ? `🇬🇧 UK : ${e.uk > 0 ? '+' : ''}${e.uk} MW`       : null,
-      e.allemagne  != null ? `🇩🇪 DE : ${e.allemagne > 0 ? '+' : ''}${e.allemagne} MW` : null,
-      e.suisse     != null ? `🇨🇭 CH : ${e.suisse > 0 ? '+' : ''}${e.suisse} MW`    : null,
-      e.italie     != null ? `🇮🇹 IT : ${e.italie > 0 ? '+' : ''}${e.italie} MW`    : null,
-      e.espagne    != null ? `🇪🇸 ES : ${e.espagne > 0 ? '+' : ''}${e.espagne} MW`   : null,
-      e.belgique   != null ? `🇧🇪 BE : ${e.belgique > 0 ? '+' : ''}${e.belgique} MW` : null,
-    ].filter(Boolean),
+      { pays: '🇬🇧 Angleterre',         val: e.angleterre },
+      { pays: '🇩🇪🇧🇪 Allemagne/Belg.', val: e.allemagne_belgique },
+      { pays: '🇨🇭 Suisse',             val: e.suisse },
+      { pays: '🇮🇹 Italie',             val: e.italie },
+      { pays: '🇪🇸 Espagne',            val: e.espagne },
+    ].filter(d => d.val != null).map(d => ({ ...d, label: fmt(d.val) })),
   }
+}
+
+// Résumé mix pour un panneau dédié
+export function getResumeMix(etatJeu) {
+  const p = etatJeu.production_mw
+  if (!p || p.total_mw == null) return null
+  const total = p.total_mw
+  const pct = v => total > 0 ? Math.round((v / total) * 100) : 0
+  return [
+    { label: '⚛️ Nucléaire',    mw: p.nucleaire_mw,    pct: pct(p.nucleaire_mw),    color: '#6366f1' },
+    { label: '💧 Hydraulique',  mw: p.hydraulique_mw,  pct: pct(p.hydraulique_mw),  color: '#06b6d4' },
+    { label: '💨 Éolien',       mw: p.eolien_mw,       pct: pct(p.eolien_mw),       color: '#22c55e' },
+    { label: '☀️ Solaire',      mw: p.solaire_mw,      pct: pct(p.solaire_mw),      color: '#eab308' },
+    { label: '🔥 Gaz',          mw: p.gaz_mw,          pct: pct(p.gaz_mw),          color: '#f97316' },
+    { label: '🌿 Bioénergies',  mw: p.bioenergies_mw,  pct: pct(p.bioenergies_mw),  color: '#84cc16' },
+    { label: '⛽ Fioul',        mw: p.fioul_mw,        pct: pct(p.fioul_mw),        color: '#78716c' },
+    { label: '🏭 Charbon',      mw: p.charbon_mw,      pct: pct(p.charbon_mw),      color: '#44403c' },
+  ].filter(f => (f.mw ?? 0) > 0)
 }
