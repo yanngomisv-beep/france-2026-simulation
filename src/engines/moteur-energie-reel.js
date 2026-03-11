@@ -1,155 +1,227 @@
-// src/engines/moteur-energie-reel.js
-// Appelé UNE SEULE FOIS au démarrage du jeu (GameEngine useEffect)
-// Peuple etatJeu avec les données réelles ODRÉ éCO2mix, puis la simulation prend le relais
+// src/engines/moteur-echanges-energie.js
+// Calcule les échanges frontaliers tour par tour en fonction de :
+//   • La balance production/consommation française
+//   • Les prix de marché européen
+//   • Les décisions du joueur (nucléaire, ENR, maintenance, crises)
+//   • Les événements géopolitiques
 
 // ─────────────────────────────────────────────────────────────
-// FALLBACKS CONTEXTUELS (Mars 2026, crise iranienne active)
+// CAPACITÉS D'INTERCONNEXION (MW — limites physiques réelles)
 // ─────────────────────────────────────────────────────────────
-const FALLBACK = {
-  // Prix
-  prix_baril_dollars:          88,
-  prix_gaz_mwh:                42,
-  prix_electricite_marche_mwh: 95,
-  prix_electricite:            95,
+export const CAPACITES_INTERCONNEXION = {
+  angleterre:         2000,  // IFA1 + IFA2 + ElecLink
+  allemagne_belgique: 3500,  // NTC agrégé FR-DE + FR-BE
+  suisse:             3500,  // Forte interconnexion alpine
+  italie:             3900,  // Ligne alpine
+  espagne:            2800,  // Limité (Pyrénées = goulet d'étranglement)
+}
 
-  // Mix
-  part_nucleaire_mix_pct:    68,
-  part_renouvelable_mix_pct: 22,
-  part_gaz_mix_pct:           6,
-  part_charbon_mix_pct:       1,
-
-  // Production MW
-  production_mw: {
-    nucleaire_mw:   42000, eolien_mw:      8000,
-    solaire_mw:      1000, hydraulique_mw: 9000,
-    gaz_mw:          4000, charbon_mw:      200,
-    fioul_mw:         100, bioenergies_mw: 1500,
-    total_mw:       65800,
-  },
-
-  // Consommation
-  consommation_mw:    62000,
-  prevision_j_mw:     64000,
-  prevision_j1_mw:    63000,
-
-  // CO₂
-  taux_co2_g_kwh: 52,
-
-  // Échanges (positif = export France)
-  echanges_mw: {
-    angleterre: 1200, espagne: 400, italie: 900,
-    suisse: 1800, allemagne_belgique: -400, solde_total: 3900,
-  },
-
-  source_donnees: 'fallback_contextuel',
-  donnees_live:   false,
+// Prix de marché typiques par pays (€/MWh) — base de négociation
+const PRIX_MARCHE_BASE = {
+  angleterre:         110,
+  allemagne_belgique: 85,
+  suisse:             90,
+  italie:             100,
+  espagne:            95,
+  france:             95,
 }
 
 // ─────────────────────────────────────────────────────────────
-// FETCH PRINCIPAL
+// CALCUL PRINCIPAL — appelé dans passerTour()
 // ─────────────────────────────────────────────────────────────
-export async function chargerDonneesEnergie() {
-  try {
-    const res = await fetch('/api/energie', {
-      signal: AbortSignal.timeout(7000),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
 
-    const live = Object.values(data.source ?? {}).some(s => s === 'ODRE_LIVE' || s === 'oilpriceapi')
-    const eco2mix_live = data.source?.eco2mix === 'ODRE_LIVE'
+/**
+ * Recalcule les échanges frontaliers pour ce tour.
+ *
+ * @param {object} etatJeu - État courant du jeu
+ * @returns {{ echanges_mw, solde_total, evenements }}
+ */
+export function calculerEchangesEnergie(etatJeu) {
+  const prod       = etatJeu.production_mw?.total_mw ?? 65000
+  const conso      = etatJeu.consommation_mw ?? 60000
+  const balance    = prod - conso              // positif = surplus → tendance export
+  const prix_fr    = etatJeu.prix_electricite_marche_mwh ?? 95
 
-    return {
-      // ── Prix ───────────────────────────────────────────────
-      prix_baril_dollars:          data.prix_baril_dollars          ?? FALLBACK.prix_baril_dollars,
-      prix_gaz_mwh:                FALLBACK.prix_gaz_mwh,            // pas dans éCO2mix, hardcodé
-      prix_electricite_marche_mwh: FALLBACK.prix_electricite_marche_mwh,
-      prix_electricite:            FALLBACK.prix_electricite,
+  const evenements = []
 
-      // ── Mix % ──────────────────────────────────────────────
-      part_nucleaire_mix_pct:      data.mix_pct?.nucleaire    ?? FALLBACK.part_nucleaire_mix_pct,
-      part_renouvelable_mix_pct:   data.mix_pct?.renouvelable ?? FALLBACK.part_renouvelable_mix_pct,
-      part_gaz_mix_pct:            data.mix_pct?.gaz          ?? FALLBACK.part_gaz_mix_pct,
-      part_charbon_mix_pct:        data.mix_pct?.charbon      ?? FALLBACK.part_charbon_mix_pct,
+  // ── Calcul base par pays ────────────────────────────────────
+  // Principe : on exporte si surplus FR + prix FR < prix voisin
+  //            on importe si déficit FR OU prix FR > prix voisin
+  const echanges = {}
 
-      // ── Production MW (nouveau — pas dans etatJeu avant) ───
-      production_mw:               eco2mix_live ? data.production : FALLBACK.production_mw,
+  Object.entries(CAPACITES_INTERCONNEXION).forEach(([pays, capacite_max]) => {
+    const prix_voisin = _getPrixVoisin(pays, etatJeu)
+    const diff_prix   = prix_voisin - prix_fr   // positif → avantage à exporter vers ce pays
 
-      // ── Consommation ───────────────────────────────────────
-      consommation_mw:             data.consommation?.realisee_mw  ?? FALLBACK.consommation_mw,
-      prevision_j_mw:              data.consommation?.prevision_j  ?? FALLBACK.prevision_j_mw,
-      prevision_j1_mw:             data.consommation?.prevision_j1 ?? FALLBACK.prevision_j1_mw,
+    // Volume de base proportionnel au surplus/déficit et à l'écart de prix
+    let volume = 0
 
-      // ── CO₂ ────────────────────────────────────────────────
-      taux_co2_g_kwh:              data.taux_co2_g_kwh ?? FALLBACK.taux_co2_g_kwh,
-
-      // ── Échanges frontaliers ────────────────────────────────
-      echanges_mw:                 eco2mix_live ? data.echanges_mw : FALLBACK.echanges_mw,
-
-      // ── Méta ───────────────────────────────────────────────
-      source_donnees:              live ? 'ODRE_LIVE' : 'fallback_contextuel',
-      donnees_live:                live,
-      timestamp_donnees:           data.timestamp_eco2mix ?? data.timestamp ?? new Date().toISOString(),
+    if (balance > 0) {
+      // Surplus → export naturel, amplifié si prix voisin > prix FR
+      const fraction = Math.min(1, balance / 20000)  // normaliser sur 20 GW max
+      volume = fraction * capacite_max * 0.4          // utilisation max 40% de la capacité en base
+      if (diff_prix > 0) volume += Math.min(capacite_max * 0.4, diff_prix * 8)
+    } else {
+      // Déficit → import naturel
+      const fraction = Math.min(1, Math.abs(balance) / 15000)
+      volume = -(fraction * capacite_max * 0.3)
+      if (diff_prix < 0) volume -= Math.min(capacite_max * 0.3, Math.abs(diff_prix) * 6)
     }
-  } catch (e) {
-    console.warn('chargerDonneesEnergie — fallback:', e.message)
-    return { ...FALLBACK, timestamp_donnees: new Date().toISOString() }
+
+    // Contrainte espagne — goulet d'étranglement pyrénéen historique
+    if (pays === 'espagne') volume = Math.max(-800, Math.min(800, volume))
+
+    // Clamp capacité physique
+    volume = Math.max(-capacite_max, Math.min(capacite_max, volume))
+
+    // Arrondir
+    echanges[pays] = Math.round(volume)
+  })
+
+  // ── Modificateurs selon les décisions du joueur ─────────────
+
+  // Arrêt nucléaire → moins de surplus → moins d'export / plus d'import
+  const nucleaire_pct = etatJeu.part_nucleaire_mix_pct ?? 68
+  if (nucleaire_pct < 50) {
+    Object.keys(echanges).forEach(pays => {
+      echanges[pays] = Math.round(echanges[pays] * 0.6)
+    })
+    evenements.push({ emoji: '⚛️', titre: 'Réduction nucléaire : capacité d\'export en baisse' })
+  }
+
+  // EPR2 terminé → boost production → surplus accru
+  if (etatJeu.avancement_epr2_pct >= 100) {
+    echanges.allemagne_belgique = Math.min(CAPACITES_INTERCONNEXION.allemagne_belgique, (echanges.allemagne_belgique ?? 0) + 800)
+    echanges.italie             = Math.min(CAPACITES_INTERCONNEXION.italie,             (echanges.italie ?? 0) + 600)
+    evenements.push({ emoji: '⚛️', titre: 'EPR2 opérationnel : surplus d\'export +1,4 GW' })
+  }
+
+  // Crise iranienne → prix baril élevé → gaz cher → prix élec FR monte → moins compétitif à l'export
+  if ((etatJeu.prix_baril_dollars ?? 80) > 120) {
+    echanges.angleterre         = Math.round((echanges.angleterre ?? 0) * 0.75)
+    echanges.allemagne_belgique = Math.round((echanges.allemagne_belgique ?? 0) * 0.80)
+    evenements.push({ emoji: '🛢️', titre: 'Pétrole >120$ : coût de l\'énergie FR en hausse, export réduit' })
+  }
+
+  // Maintenance centrale → réduction proportionnelle à la capacité perdue
+  const maintenance = etatJeu.infrastructures_en_maintenance ?? []
+  if (maintenance.length > 0) {
+    const mw_perdu = maintenance.reduce((s, infra) => s + (infra.puissance_mw ?? 0), 0)
+    if (mw_perdu > 2000) {
+      const ratio = Math.max(0.3, 1 - mw_perdu / 60000)
+      Object.keys(echanges).forEach(pays => {
+        if (echanges[pays] > 0) echanges[pays] = Math.round(echanges[pays] * ratio)
+      })
+      evenements.push({ emoji: '🔧', titre: `Maintenance : −${Math.round(mw_perdu / 1000)} GW, export réduit` })
+    }
+  }
+
+  // Fermeture détroit d'Ormuz → pétrole +++ → gaz +++ → mix fossile renchéri
+  if (etatJeu.mer_rouge_fermee) {
+    echanges.italie   = Math.max(-CAPACITES_INTERCONNEXION.italie, (echanges.italie ?? 0) - 400)
+    echanges.espagne  = Math.max(-CAPACITES_INTERCONNEXION.espagne, (echanges.espagne ?? 0) - 300)
+  }
+
+  // VNU activé → électricité moins chère pour industrie → conso FR monte → moins d'export
+  const vnu = etatJeu.affectation_vnu
+  if (vnu && (vnu.subvention_industrie_pct ?? 0) > 30) {
+    Object.keys(echanges).forEach(pays => {
+      if (echanges[pays] > 0) echanges[pays] = Math.round(echanges[pays] * 0.85)
+    })
+  }
+
+  // ── Solde total ─────────────────────────────────────────────
+  const solde_total = Object.values(echanges).reduce((s, v) => s + v, 0)
+
+  return {
+    echanges_mw: { ...echanges, solde_total: Math.round(solde_total) },
+    solde_total:  Math.round(solde_total),
+    evenements,
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// UTILITAIRES D'AFFICHAGE
+// PRIX DE MARCHÉ DES VOISINS — sensible aux événements
+// ─────────────────────────────────────────────────────────────
+function _getPrixVoisin(pays, etatJeu) {
+  let prix = PRIX_MARCHE_BASE[pays] ?? 90
+
+  // Crise iranienne → gaz cher → prix monte en Europe (sauf FR, forte nucléaire)
+  const baril = etatJeu.prix_baril_dollars ?? 80
+  if (baril > 100) {
+    const coeff = pays === 'allemagne_belgique' ? 1.4 : 1.2  // DE très dépendant gaz
+    prix += (baril - 100) * coeff
+  }
+
+  // Hiver → pic de conso → prix monte
+  const mois = new Date().getMonth() // 0=jan, 11=dec
+  if (mois <= 1 || mois >= 11) prix += 15
+
+  return Math.round(prix)
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMPACT DES ÉCHANGES SUR L'ÉTAT DU JEU
 // ─────────────────────────────────────────────────────────────
 
-// Résumé pour tooltip barre de stats
-export function getResumeDonneesEnergie(etatJeu) {
-  const live = etatJeu.donnees_live
-  const ts   = etatJeu.timestamp_donnees?.slice(0, 16).replace('T', ' ') ?? ''
-  return {
-    badge:   live ? '🟢 Live' : '🟡 Estimé',
-    source:  live ? 'ODRÉ éCO2mix (RTE)' : 'Valeurs contextuelles Mars 2026',
-    tooltip: live
-      ? `Données réelles RTE — MAJ : ${ts}`
-      : 'ODRÉ non disponible. Valeurs estimées pour Mars 2026 (crise iranienne, Ormuz sous tension).',
-  }
+/**
+ * Calcule les revenus/coûts des échanges en milliards €/an
+ * (simplifié pour le gameplay)
+ */
+export function calculerRevenusEchanges(echanges_mw, prix_fr) {
+  const prix = prix_fr ?? 95
+  let revenu_annuel_milliards = 0
+
+  Object.entries(echanges_mw).forEach(([pays, mw]) => {
+    if (pays === 'solde_total') return
+    const prix_voisin = PRIX_MARCHE_BASE[pays] ?? 90
+    const heures_an   = 8760
+
+    if (mw > 0) {
+      // Export : vente au prix du marché voisin
+      revenu_annuel_milliards += (mw / 1000) * prix_voisin * heures_an / 1e9
+    } else {
+      // Import : achat au prix voisin + coût de transport
+      revenu_annuel_milliards += (mw / 1000) * prix_voisin * heures_an / 1e9
+    }
+  })
+
+  return Math.round(revenu_annuel_milliards * 10) / 10
 }
 
-// Résumé échanges frontaliers pour l'UI
-export function getResumeEchanges(etatJeu) {
-  const e = etatJeu.echanges_mw
-  if (!e) return null
-  const solde = e.solde_total ?? 0
-  const fmt = v => `${v > 0 ? '+' : ''}${(v ?? 0).toLocaleString('fr-FR')} MW`
-  return {
-    solde_mw:    solde,
-    exportateur: solde > 0,
-    label:       solde > 0
-      ? `🔋 Export net : ${fmt(solde)}`
-      : `⬇️ Import net : ${fmt(solde)}`,
-    detail: [
-      { pays: '🇬🇧 Angleterre',         val: e.angleterre },
-      { pays: '🇩🇪🇧🇪 Allemagne/Belg.', val: e.allemagne_belgique },
-      { pays: '🇨🇭 Suisse',             val: e.suisse },
-      { pays: '🇮🇹 Italie',             val: e.italie },
-      { pays: '🇪🇸 Espagne',            val: e.espagne },
-    ].filter(d => d.val != null).map(d => ({ ...d, label: fmt(d.val) })),
-  }
-}
+// ─────────────────────────────────────────────────────────────
+// RÉSUMÉ TEXTUEL POUR L'UI
+// ─────────────────────────────────────────────────────────────
+export function getAnalyseEchanges(etatJeu) {
+  const e      = etatJeu.echanges_mw ?? {}
+  const solde  = e.solde_total ?? 0
+  const prod   = etatJeu.production_mw?.total_mw ?? 0
+  const conso  = etatJeu.consommation_mw ?? 0
+  const nucl   = etatJeu.part_nucleaire_mix_pct ?? 68
 
-// Résumé mix pour un panneau dédié
-export function getResumeMix(etatJeu) {
-  const p = etatJeu.production_mw
-  if (!p || p.total_mw == null) return null
-  const total = p.total_mw
-  const pct = v => total > 0 ? Math.round((v / total) * 100) : 0
-  return [
-    { label: '⚛️ Nucléaire',    mw: p.nucleaire_mw,    pct: pct(p.nucleaire_mw),    color: '#6366f1' },
-    { label: '💧 Hydraulique',  mw: p.hydraulique_mw,  pct: pct(p.hydraulique_mw),  color: '#06b6d4' },
-    { label: '💨 Éolien',       mw: p.eolien_mw,       pct: pct(p.eolien_mw),       color: '#22c55e' },
-    { label: '☀️ Solaire',      mw: p.solaire_mw,      pct: pct(p.solaire_mw),      color: '#eab308' },
-    { label: '🔥 Gaz',          mw: p.gaz_mw,          pct: pct(p.gaz_mw),          color: '#f97316' },
-    { label: '🌿 Bioénergies',  mw: p.bioenergies_mw,  pct: pct(p.bioenergies_mw),  color: '#84cc16' },
-    { label: '⛽ Fioul',        mw: p.fioul_mw,        pct: pct(p.fioul_mw),        color: '#78716c' },
-    { label: '🏭 Charbon',      mw: p.charbon_mw,      pct: pct(p.charbon_mw),      color: '#44403c' },
-  ].filter(f => (f.mw ?? 0) > 0)
+  const lignes = []
+
+  if (solde > 3000) {
+    lignes.push('🔋 La France est un exportateur net majeur. Le nucléaire assure la compétitivité.')
+  } else if (solde > 0) {
+    lignes.push('📤 Léger excédent d\'export. La France équilibre bien production et consommation.')
+  } else if (solde > -2000) {
+    lignes.push('📥 Légère dépendance aux imports. Surveiller la capacité de production.')
+  } else {
+    lignes.push('⚠️ Forte dépendance aux imports. Risque de tension sur l\'approvisionnement.')
+  }
+
+  if (nucl < 40) {
+    lignes.push('⚛️ La part nucléaire faible réduit structurellement la capacité d\'export.')
+  }
+
+  if ((e.espagne ?? 0) < -500) {
+    lignes.push('🇪🇸 Import massif depuis l\'Espagne. Interconnexion pyrénéenne saturée ?')
+  }
+
+  if ((e.suisse ?? 0) > 2000) {
+    lignes.push('🇨🇭 Export important vers la Suisse — bonne compétitivité du mix français.')
+  }
+
+  return lignes
 }
