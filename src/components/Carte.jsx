@@ -4,7 +4,7 @@ import { COULEURS_PARTIS, getPolitiqueDepartement } from '../data/departements-s
 import PanneauEnergie from './PanneauEnergie.jsx'
 
 // ─────────────────────────────────────────────────────────────
-// CONFIG MODES
+// MODES
 // ─────────────────────────────────────────────────────────────
 
 const MODES = [
@@ -16,7 +16,7 @@ const MODES = [
 ]
 
 // ─────────────────────────────────────────────────────────────
-// DONNÉES PAYS EUROPÉENS
+// PAYS EUROPÉENS
 // ─────────────────────────────────────────────────────────────
 
 const PAYS_DATA = {
@@ -29,112 +29,38 @@ const PAYS_DATA = {
   GBR: { nom: 'Royaume-Uni', emoji: '🇬🇧', echanges_key: 'angleterre',         relation: 48, tension: 52 },
   AND: { nom: 'Andorre',     emoji: '🇦🇩', echanges_key: null,                 relation: 80, tension: 10 },
   MCO: { nom: 'Monaco',      emoji: '🇲🇨', echanges_key: null,                 relation: 85, tension:  8 },
-  NLD: { nom: 'Pays-Bas',    emoji: '🇳🇱', echanges_key: null,                 relation: 62, tension: 35 },
 }
 
 const CAP_MAX = { angleterre: 2000, allemagne_belgique: 3500, suisse: 3500, italie: 3900, espagne: 800 }
 
 // ─────────────────────────────────────────────────────────────
-// DROM — codes présents dans le GeoJSON gregoiredavid
+// DROM — codes + config encarts
+// La projection utilise d3.geoMercator().fitExtent() pour que
+// la forme remplisse TOUJOURS l'encart, quelle que soit sa taille
 // ─────────────────────────────────────────────────────────────
 
 const DROM_CODES = ['971', '972', '973', '974', '976']
 
-// encartY : ligne 1 DROM = y~650, doit tenir dans viewBox H=860
-// scale D3 = résolution souhaitée — calculé en geoMercator units
 const DROM_CONFIG = {
-  '971': { nom: 'Guadeloupe', pop: '400 000 hab.', chef: 'Basse-Terre',
-           encartX: 18,  encartY: 652, encartW: 90, encartH: 78,
-           center: [-61.55, 16.25], scale: 50000 },
-  '972': { nom: 'Martinique', pop: '360 000 hab.', chef: 'Fort-de-France',
-           encartX: 118, encartY: 652, encartW: 80, encartH: 78,
-           center: [-61.02, 14.65], scale: 65000 },
-  '973': { nom: 'Guyane',     pop: '300 000 hab.', chef: 'Cayenne',
-           encartX: 208, encartY: 640, encartW: 94, encartH: 90,
-           center: [-53.20,  3.90],  scale: 3800  },
-  '974': { nom: 'La Réunion', pop: '900 000 hab.', chef: 'Saint-Denis',
-           encartX: 312, encartY: 652, encartW: 84, encartH: 78,
-           center: [55.54, -21.12],  scale: 62000 },
-  '976': { nom: 'Mayotte',    pop: '320 000 hab.', chef: 'Mamoudzou',
-           encartX: 406, encartY: 656, encartW: 74, encartH: 74,
-           center: [45.17, -12.83],  scale: 115000 },
+  '971': { nom: 'Guadeloupe',  pop: '400 000 hab.', chef: 'Basse-Terre',
+           encartX: 18,  encartY: 648, encartW: 94, encartH: 82 },
+  '972': { nom: 'Martinique',  pop: '360 000 hab.', chef: 'Fort-de-France',
+           encartX: 122, encartY: 648, encartW: 82, encartH: 82 },
+  '973': { nom: 'Guyane',      pop: '300 000 hab.', chef: 'Cayenne',
+           encartX: 214, encartY: 636, encartW: 98, encartH: 94 },
+  '974': { nom: 'La Réunion',  pop: '900 000 hab.', chef: 'Saint-Denis',
+           encartX: 322, encartY: 648, encartW: 86, encartH: 82 },
+  '976': { nom: 'Mayotte',     pop: '320 000 hab.', chef: 'Mamoudzou',
+           encartX: 418, encartY: 652, encartW: 78, encartH: 78 },
 }
 
 // ─────────────────────────────────────────────────────────────
-// COM — Collectivités d'Outre-Mer
-// Formes SVG inline normalisées (coordonnées 0→1)
+// ZOOM ÎLE-DE-FRANCE
 // ─────────────────────────────────────────────────────────────
 
-const COM_CONFIG = {
-  '975': {
-    nom: 'St-Pierre-et-Miquelon', pop: '6 000 hab.',  chef: 'Saint-Pierre',
-    encartX: 18,  encartY: 750, encartW: 74, encartH: 74,
-    // Miquelon-Langlade (nord) + Saint-Pierre (sud)
-    paths: [
-      'M0.34,0.06 L0.52,0.04 L0.66,0.10 L0.70,0.22 L0.64,0.40 L0.56,0.50 L0.62,0.60 L0.56,0.66 L0.44,0.62 L0.36,0.52 L0.28,0.36 L0.26,0.22 L0.30,0.12 Z',
-      'M0.32,0.74 L0.48,0.71 L0.60,0.75 L0.62,0.85 L0.52,0.92 L0.36,0.94 L0.28,0.86 L0.28,0.76 Z',
-    ],
-  },
-  '977': {
-    nom: 'Saint-Barthélemy', pop: '10 000 hab.', chef: 'Gustavia',
-    encartX: 102, encartY: 750, encartW: 64, encartH: 74,
-    paths: [
-      'M0.12,0.42 L0.22,0.28 L0.40,0.22 L0.60,0.24 L0.76,0.34 L0.84,0.46 L0.76,0.58 L0.58,0.68 L0.38,0.66 L0.22,0.58 L0.14,0.50 Z',
-    ],
-  },
-  '978': {
-    nom: 'Saint-Martin (Fr.)', pop: '33 000 hab.', chef: 'Marigot',
-    encartX: 176, encartY: 750, encartW: 68, encartH: 74,
-    paths: [
-      // Partie française (nord) — île partagée avec Sint Maarten
-      'M0.10,0.44 L0.18,0.26 L0.36,0.16 L0.58,0.18 L0.78,0.28 L0.88,0.44 L0.82,0.56 L0.66,0.64 L0.44,0.66 L0.26,0.58 L0.14,0.52 Z',
-      // Étang de la baie (lagon central — fond)
-      'M0.38,0.38 L0.48,0.34 L0.56,0.38 L0.56,0.48 L0.46,0.54 L0.36,0.48 Z',
-    ],
-  },
-  '986': {
-    nom: 'Wallis-et-Futuna', pop: '11 000 hab.', chef: 'Mata-Utu',
-    encartX: 254, encartY: 750, encartW: 76, encartH: 74,
-    paths: [
-      // Wallis (est)
-      'M0.52,0.20 L0.68,0.18 L0.82,0.28 L0.86,0.44 L0.78,0.58 L0.62,0.64 L0.48,0.58 L0.42,0.44 L0.46,0.30 Z',
-      // Futuna
-      'M0.08,0.36 L0.20,0.28 L0.32,0.32 L0.34,0.48 L0.22,0.56 L0.10,0.50 Z',
-      // Alofi (minuscule au sud de Futuna)
-      'M0.16,0.66 L0.24,0.64 L0.28,0.70 L0.22,0.74 L0.14,0.70 Z',
-    ],
-  },
-  '987': {
-    nom: 'Polynésie française', pop: '280 000 hab.', chef: 'Papeete',
-    encartX: 340, encartY: 750, encartW: 128, encartH: 74,
-    paths: [
-      // Tahiti (principale — triangle arrondi)
-      'M0.40,0.22 L0.54,0.18 L0.64,0.26 L0.66,0.42 L0.58,0.56 L0.44,0.62 L0.34,0.54 L0.32,0.38 L0.36,0.26 Z',
-      // Moorea (à gauche de Tahiti)
-      'M0.20,0.28 L0.30,0.22 L0.38,0.28 L0.36,0.42 L0.26,0.48 L0.16,0.42 Z',
-      // Bora-Bora (atoll NV)
-      'M0.06,0.18 L0.14,0.14 L0.20,0.18 L0.18,0.28 L0.10,0.30 Z',
-      // Rangiroa (atoll est)
-      'M0.72,0.18 L0.80,0.14 L0.88,0.18 L0.90,0.28 L0.82,0.32 L0.72,0.26 Z',
-      // Marquises (NE — point symbolique)
-      'M0.88,0.56 L0.94,0.52 L0.98,0.58 L0.94,0.64 L0.86,0.62 Z',
-      // Austral (S — point symbolique)
-      'M0.44,0.76 L0.50,0.72 L0.56,0.76 L0.54,0.82 L0.46,0.84 Z',
-    ],
-  },
-  '988': {
-    nom: 'Nouvelle-Calédonie', pop: '270 000 hab.', chef: 'Nouméa',
-    encartX: 478, encartY: 750, encartW: 138, encartH: 74,
-    paths: [
-      // Grande Terre — île allongée NW/SE
-      'M0.04,0.36 L0.14,0.26 L0.28,0.22 L0.44,0.22 L0.58,0.24 L0.72,0.28 L0.82,0.34 L0.90,0.42 L0.94,0.52 L0.88,0.60 L0.74,0.64 L0.56,0.64 L0.38,0.60 L0.20,0.54 L0.08,0.46 Z',
-      // Île des Pins (SE)
-      'M0.78,0.70 L0.86,0.68 L0.90,0.74 L0.88,0.80 L0.80,0.82 L0.74,0.76 Z',
-      // Loyalty (Est — 3 atolls)
-      'M0.92,0.20 L0.97,0.16 L1.0,0.20 L0.98,0.28 L0.92,0.26 Z',
-    ],
-  },
-}
+const IDF_CODES = ['75', '77', '78', '91', '92', '93', '94', '95']
+
+const IDF_ENCART = { x: 530, y: 636, w: 218, h: 130 }
 
 // ─────────────────────────────────────────────────────────────
 // COULEURS
@@ -160,7 +86,7 @@ function getCouleurTerritoire(code, mode, etatJeu) {
   }
   if (mode === 'chomage') {
     const s = ((code.charCodeAt(0)*17 + (code.charCodeAt(1) ?? 1)*5) % 100) / 100
-    const t = Math.min(1, Math.max(0, (etatJeu?.tension_sociale ?? 45) / 100 * 0.7 + s * 0.3))
+    const t = Math.min(1, Math.max(0, (etatJeu?.tension_sociale ?? 45)/100 * 0.7 + s * 0.3))
     return `rgb(${Math.round(200*t)},${Math.round(160-120*t)},${Math.round(30+20*t)})`
   }
   return '#475569'
@@ -175,8 +101,7 @@ function getCouleurPays(code, mode, etatJeu) {
   }
   if (mode === 'energie') {
     if (!p.echanges_key) return '#1e3a5f'
-    const mw = etatJeu?.echanges_mw?.[p.echanges_key] ?? 0
-    return mw > 0 ? '#14532d' : '#7f1d1d'
+    return (etatJeu?.echanges_mw?.[p.echanges_key] ?? 0) > 0 ? '#14532d' : '#7f1d1d'
   }
   return '#1e3a5f'
 }
@@ -188,131 +113,162 @@ function fmtMW(mw) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DESSIN ENCART DROM (D3 Mercator sur GeoJSON réel)
+// DESSIN ENCART DROM — fitExtent garantit que la forme est visible
 // ─────────────────────────────────────────────────────────────
 
 function dessinerDrom(svg, feature, cfg, code, mode, etatJeu, onSelect) {
-  const { encartX: ex, encartY: ey, encartW: ew, encartH: eh, center, scale, nom } = cfg
+  const { encartX: ex, encartY: ey, encartW: ew, encartH: eh, nom } = cfg
+  const PAD = 6
+  const labelH = 14
   const couleur = getCouleurTerritoire(code, mode, etatJeu)
 
-  // Fond + bordure
+  // Fond
   svg.append('rect')
     .attr('x', ex - 1).attr('y', ey - 1)
     .attr('width', ew + 2).attr('height', eh + 2)
-    .attr('rx', 5).attr('fill', '#0d1f35')
+    .attr('rx', 6).attr('fill', '#0d1f35')
     .attr('stroke', '#1e3a5f').attr('stroke-width', 1)
 
-  // Projection initiale pour mesurer les bounds
-  const makeProj = (s) => d3.geoMercator()
-    .center(center).scale(s)
-    .translate([ex + ew / 2, ey + eh / 2 - 8])
+  // fitExtent : D3 calcule scale+translate pour que la forme
+  // remplisse exactement [[ex+PAD, ey+PAD], [ex+ew-PAD, ey+eh-PAD-labelH]]
+  const extent = [
+    [ex + PAD, ey + PAD],
+    [ex + ew - PAD, ey + eh - PAD - labelH],
+  ]
 
-  const pathFn0 = d3.geoPath().projection(makeProj(scale))
-  const [[x0, y0], [x1, y1]] = pathFn0.bounds(feature)
-  const bw = x1 - x0, bh = y1 - y0
-  const availW = ew - 8, availH = eh - 16
-
-  // Ajuster scale pour que la forme tienne
-  let finalScale = scale
-  if (bw > 0 && bh > 0) {
-    const ratio = Math.min(availW / bw, availH / bh)
-    finalScale = scale * ratio * 0.88
-  }
-
-  const proj = makeProj(finalScale)
+  const proj = d3.geoMercator().fitExtent(extent, feature)
   const pathFn = d3.geoPath().projection(proj)
 
-  // Clip dans l'encart
+  // Clippath
   const clipId = `clip-drom-${code}`
-  svg.append('defs').append('clipPath').attr('id', clipId)
-    .append('rect').attr('x', ex).attr('y', ey).attr('width', ew).attr('height', eh - 12)
+  const defs = svg.select('defs').empty() ? svg.append('defs') : svg.select('defs')
+  defs.append('clipPath').attr('id', clipId)
+    .append('rect')
+    .attr('x', ex).attr('y', ey)
+    .attr('width', ew).attr('height', eh - labelH)
 
   const g = svg.append('g').style('cursor', 'pointer')
     .on('click', () => onSelect(code, nom, true))
     .on('mouseover', function() {
-      g.select('path').attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1.2)
+      g.select('.drom-shape').attr('fill-opacity', 1).attr('stroke', '#e2e8f0').attr('stroke-width', 1)
     })
     .on('mouseout', function() {
-      g.select('path').attr('fill-opacity', 0.88).attr('stroke', '#0f172a').attr('stroke-width', 0.4)
+      g.select('.drom-shape').attr('fill-opacity', 0.9).attr('stroke', '#0f172a').attr('stroke-width', 0.4)
     })
 
   g.append('path')
+    .attr('class', 'drom-shape')
     .datum(feature)
     .attr('d', pathFn)
     .attr('fill', couleur)
-    .attr('fill-opacity', 0.88)
+    .attr('fill-opacity', 0.9)
     .attr('stroke', '#0f172a').attr('stroke-width', 0.4)
     .attr('clip-path', `url(#${clipId})`)
 
+  // Label centré
   svg.append('text')
-    .attr('x', ex + ew / 2).attr('y', ey + eh - 3)
-    .attr('text-anchor', 'middle').attr('fill', '#64748b').attr('font-size', 7)
+    .attr('x', ex + ew / 2)
+    .attr('y', ey + eh - 3)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#64748b').attr('font-size', 7.5)
     .attr('pointer-events', 'none')
     .text(nom)
 }
 
 // ─────────────────────────────────────────────────────────────
-// DESSIN ENCART COM (paths SVG normalisés 0→1)
+// DESSIN ZOOM ÎLE-DE-FRANCE
 // ─────────────────────────────────────────────────────────────
 
-function dessinerCom(svg, code, mode, etatJeu, onSelect) {
-  const cfg = COM_CONFIG[code]
-  if (!cfg) return
-  const { encartX: ex, encartY: ey, encartW: ew, encartH: eh, nom, paths } = cfg
-  const couleur = getCouleurTerritoire(code, mode, etatJeu)
-  const shapeH = eh - 12
+function dessinerZoomIDF(svg, idfFeatures, mode, etatJeu, onSelectDep) {
+  if (!idfFeatures || idfFeatures.length === 0) return
+  const { x: ex, y: ey, w: ew, h: eh } = IDF_ENCART
+  const PAD = 8
+  const TITLE_H = 14
 
+  // Fond encart
   svg.append('rect')
     .attr('x', ex - 1).attr('y', ey - 1)
     .attr('width', ew + 2).attr('height', eh + 2)
-    .attr('rx', 5).attr('fill', '#0d1f35')
-    .attr('stroke', '#1e3a5f').attr('stroke-width', 1)
+    .attr('rx', 6).attr('fill', '#0b1929')
+    .attr('stroke', '#2563eb').attr('stroke-width', 1.2)
 
-  const clipId = `clip-com-${code}`
-  svg.append('defs').append('clipPath').attr('id', clipId)
-    .append('rect').attr('x', ex).attr('y', ey).attr('width', ew).attr('height', shapeH)
+  // Titre
+  svg.append('text')
+    .attr('x', ex + ew / 2).attr('y', ey + 10)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#60a5fa').attr('font-size', 7.5).attr('font-weight', 'bold')
+    .attr('pointer-events', 'none')
+    .text('🔍 Île-de-France')
 
-  const PAD = 5
-  const sx = ew - PAD * 2
-  const sy = shapeH - PAD * 2
-  const tx = ex + PAD
-  const ty = ey + PAD
+  // Collection pour fitExtent
+  const collection = { type: 'FeatureCollection', features: idfFeatures }
+  const extent = [
+    [ex + PAD, ey + TITLE_H + PAD],
+    [ex + ew - PAD, ey + eh - PAD],
+  ]
 
-  const g = svg.append('g').style('cursor', 'pointer')
-    .on('click', () => onSelect(code, nom, false))
-    .on('mouseover', function() {
-      g.selectAll('path').attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 0.8)
-    })
-    .on('mouseout', function() {
-      g.selectAll('path').attr('fill-opacity', 0.88).attr('stroke', '#0f172a').attr('stroke-width', 0.3)
-    })
+  const proj = d3.geoMercator().fitExtent(extent, collection)
+  const pathFn = d3.geoPath().projection(proj)
 
-  paths.forEach(d => {
-    const scaled = d.replace(/(-?[\d.]+),(-?[\d.]+)/g, (_, px, py) =>
-      `${(parseFloat(px) * sx + tx).toFixed(1)},${(parseFloat(py) * sy + ty).toFixed(1)}`
-    )
+  const clipId = 'clip-idf'
+  const defs = svg.select('defs').empty() ? svg.append('defs') : svg.select('defs')
+  defs.append('clipPath').attr('id', clipId)
+    .append('rect').attr('x', ex).attr('y', ey + TITLE_H).attr('width', ew).attr('height', eh - TITLE_H)
+
+  idfFeatures.forEach(feature => {
+    const code = feature.properties.code
+    const g = svg.append('g').style('cursor', 'pointer')
+      .on('click', () => onSelectDep(feature))
+      .on('mouseover', function() {
+        g.select('path').attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1.2)
+        // Tooltip code
+        svg.append('text').attr('id', 'idf-tooltip')
+          .attr('x', ex + ew / 2).attr('y', ey + eh + 14)
+          .attr('text-anchor', 'middle').attr('fill', '#93c5fd').attr('font-size', 8)
+          .text(feature.properties.nom)
+      })
+      .on('mouseout', function() {
+        g.select('path').attr('fill-opacity', 0.88).attr('stroke', '#0f172a').attr('stroke-width', 0.5)
+        svg.select('#idf-tooltip').remove()
+      })
+
     g.append('path')
-      .attr('d', scaled)
-      .attr('fill', couleur)
+      .datum(feature)
+      .attr('d', pathFn)
+      .attr('fill', getCouleurTerritoire(code, mode, etatJeu))
       .attr('fill-opacity', 0.88)
-      .attr('stroke', '#0f172a').attr('stroke-width', 0.3)
+      .attr('stroke', '#0f172a').attr('stroke-width', 0.5)
       .attr('clip-path', `url(#${clipId})`)
+
+    // Label code département
+    const centroid = pathFn.centroid(feature)
+    if (centroid && !isNaN(centroid[0])) {
+      svg.append('text')
+        .attr('x', centroid[0]).attr('y', centroid[1])
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', 'white').attr('fill-opacity', 0.7)
+        .attr('font-size', 6).attr('pointer-events', 'none')
+        .text(code)
+    }
   })
 
-  svg.append('text')
-    .attr('x', ex + ew / 2).attr('y', ey + eh - 3)
-    .attr('text-anchor', 'middle').attr('fill', '#64748b').attr('font-size', 6.5)
+  // Ligne reliant l'encart à la position IDF sur la carte principale
+  // (flèche indicative depuis ~Seine-et-Marne vers l'encart)
+  svg.append('line')
+    .attr('x1', ex).attr('y1', ey + eh / 2)
+    .attr('x2', ex - 30).attr('y2', ey - 20)
+    .attr('stroke', '#2563eb').attr('stroke-width', 0.8)
+    .attr('stroke-dasharray', '3,3').attr('opacity', 0.5)
     .attr('pointer-events', 'none')
-    .text(nom)
 }
 
 // ─────────────────────────────────────────────────────────────
-// PANNEAU TERRITOIRE (DROM / COM)
+// PANNEAUX
 // ─────────────────────────────────────────────────────────────
 
 function PanneauTerritoire({ code, nom, isDrom, onFermer, mode, etatJeu }) {
-  const cfg    = isDrom ? DROM_CONFIG[code] : COM_CONFIG[code]
-  const pol    = getPolitiqueDepartement(code)
+  const cfg = DROM_CONFIG[code]
+  const pol = getPolitiqueDepartement(code)
   const couleur = getCouleurTerritoire(code, mode, etatJeu)
 
   return (
@@ -323,9 +279,7 @@ function PanneauTerritoire({ code, nom, isDrom, onFermer, mode, etatJeu }) {
             <div className="w-4 h-4 rounded-sm flex-shrink-0" style={{ backgroundColor: couleur }} />
             <h3 className="font-bold text-white text-base">{nom}</h3>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isDrom ? 'Département & Région d\'Outre-Mer' : 'Collectivité d\'Outre-Mer'}
-          </p>
+          <p className="text-xs text-slate-500 mt-0.5">Département & Région d'Outre-Mer</p>
         </div>
         <button onClick={onFermer} className="text-slate-500 hover:text-white text-lg leading-none ml-2">✕</button>
       </div>
@@ -335,7 +289,7 @@ function PanneauTerritoire({ code, nom, isDrom, onFermer, mode, etatJeu }) {
           { label: '👥 Population', val: cfg?.pop  ?? '—' },
           { label: '🏛️ Chef-lieu',  val: cfg?.chef ?? '—' },
           { label: '📍 Code INSEE', val: code },
-          { label: '🗂️ Statut',    val: isDrom ? 'DROM (Art. 73)' : 'COM (Art. 74)' },
+          { label: '🗂️ Statut',    val: 'DROM (Art. 73)' },
         ].map(s => (
           <div key={s.label} className="bg-slate-800/70 rounded-lg p-2">
             <p className="text-[10px] text-slate-500">{s.label}</p>
@@ -370,24 +324,20 @@ function PanneauTerritoire({ code, nom, isDrom, onFermer, mode, etatJeu }) {
         <div className="mb-3 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/30">
           <div className="flex justify-between mb-1">
             <span className="text-xs text-amber-400 font-semibold">Chômage estimé</span>
-            <span className="text-xs text-amber-300 font-bold">
-              {(((etatJeu?.tension_sociale ?? 45) * 0.15) + 8).toFixed(1)}%
-            </span>
+            <span className="text-xs text-amber-300 font-bold">{(((etatJeu?.tension_sociale ?? 45) * 0.15) + 8).toFixed(1)}%</span>
           </div>
           <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
             <div className="h-full bg-amber-500 rounded-full"
               style={{ width: `${Math.min(100, (etatJeu?.tension_sociale ?? 45) * 0.7 + 10)}%` }} />
           </div>
-          <p className="text-[10px] text-slate-500 mt-1.5">Taux structurellement plus élevé en Outre-Mer</p>
+          <p className="text-[10px] text-slate-500 mt-1">Taux structurellement plus élevé en Outre-Mer</p>
         </div>
       )}
       {mode === 'energie' && (
         <div className="mb-3 p-2.5 rounded-lg bg-blue-950/40 border border-blue-800/30">
-          <p className="text-xs text-blue-400 font-semibold mb-1.5">Mix énergétique</p>
+          <p className="text-xs text-blue-400 font-semibold mb-1.5">Mix énergétique local</p>
           <p className="text-[10px] text-slate-400 leading-relaxed">
-            {isDrom
-              ? 'Réseau insulaire autonome. Mix : fioul + solaire en développement. Pas d\'interconnexion continentale.'
-              : 'Réseau propre. Transition vers 100% renouvelable selon les territoires.'}
+            Réseau insulaire autonome. Principalement fioul et solaire. Pas d'interconnexion avec le réseau continental.
           </p>
         </div>
       )}
@@ -396,30 +346,24 @@ function PanneauTerritoire({ code, nom, isDrom, onFermer, mode, etatJeu }) {
         <>
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Intentions de vote 2026</p>
           <div className="flex flex-col gap-1">
-            {Object.entries(pol.intentions)
-              .sort(([,a],[,b]) => b - a).slice(0, 5)
-              .map(([parti, pct]) => (
-                <div key={parti} className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
-                  <span className="text-xs text-slate-400 w-16">{parti}</span>
-                  <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full"
-                      style={{ width: `${pct}%`, backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
-                  </div>
-                  <span className="text-xs text-white font-bold w-7 text-right">{pct}%</span>
+            {Object.entries(pol.intentions).sort(([,a],[,b]) => b - a).slice(0, 5).map(([parti, pct]) => (
+              <div key={parti} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
+                <span className="text-xs text-slate-400 w-16">{parti}</span>
+                <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full"
+                    style={{ width: `${pct}%`, backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
                 </div>
-              ))}
+                <span className="text-xs text-white font-bold w-7 text-right">{pct}%</span>
+              </div>
+            ))}
           </div>
         </>
       )}
     </div>
   )
 }
-
-// ─────────────────────────────────────────────────────────────
-// PANNEAU DÉPARTEMENT (métropole)
-// ─────────────────────────────────────────────────────────────
 
 function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
   if (!feature) return null
@@ -487,9 +431,7 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
         <div className="mb-3 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/30">
           <div className="flex justify-between mb-1">
             <span className="text-xs text-amber-400 font-semibold">Chômage estimé</span>
-            <span className="text-xs text-amber-300 font-bold">
-              {(((etatJeu?.tension_sociale ?? 45) * 0.12) + 5).toFixed(1)}%
-            </span>
+            <span className="text-xs text-amber-300 font-bold">{(((etatJeu?.tension_sociale ?? 45) * 0.12) + 5).toFixed(1)}%</span>
           </div>
           <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
             <div className="h-full bg-amber-500 rounded-full"
@@ -500,36 +442,30 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
 
       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Intentions de vote 2026</p>
       <div className="flex flex-col gap-1">
-        {Object.entries(pol.intentions)
-          .sort(([,a],[,b]) => b - a).slice(0, 6)
-          .map(([parti, pct]) => (
-            <div key={parti} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
-              <span className="text-xs text-slate-400 w-16">{parti}</span>
-              <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
-                <div className="h-full rounded-full"
-                  style={{ width: `${pct}%`, backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
-              </div>
-              <span className="text-xs text-white font-bold w-7 text-right">{pct}%</span>
+        {Object.entries(pol.intentions).sort(([,a],[,b]) => b - a).slice(0, 6).map(([parti, pct]) => (
+          <div key={parti} className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
+            <span className="text-xs text-slate-400 w-16">{parti}</span>
+            <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+              <div className="h-full rounded-full"
+                style={{ width: `${pct}%`, backgroundColor: COULEURS_PARTIS[parti] ?? '#94a3b8' }} />
             </div>
-          ))}
+            <span className="text-xs text-white font-bold w-7 text-right">{pct}%</span>
+          </div>
+        ))}
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// PANNEAU PAYS
-// ─────────────────────────────────────────────────────────────
-
 function PanneauPays({ code, onFermer, mode, etatJeu }) {
   const pays = PAYS_DATA[code]
   if (!pays) return null
-  const mw_solde = pays.echanges_key ? (etatJeu?.echanges_mw?.[pays.echanges_key] ?? null) : null
-  const export_  = mw_solde != null ? mw_solde >= 0 : null
-  const cap      = pays.echanges_key ? (CAP_MAX[pays.echanges_key] ?? 2000) : null
-  const util_pct = mw_solde != null && cap ? Math.round((Math.abs(mw_solde) / cap) * 100) : null
+  const mw    = pays.echanges_key ? (etatJeu?.echanges_mw?.[pays.echanges_key] ?? null) : null
+  const exp   = mw != null ? mw >= 0 : null
+  const cap   = pays.echanges_key ? (CAP_MAX[pays.echanges_key] ?? 2000) : null
+  const util  = mw != null && cap ? Math.round((Math.abs(mw) / cap) * 100) : null
 
   return (
     <div className="absolute top-4 right-4 w-72 bg-slate-900 border border-slate-600 rounded-xl p-4 shadow-2xl z-20">
@@ -543,9 +479,7 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
       <div className="mb-3">
         <div className="flex justify-between mb-1">
           <span className="text-xs text-slate-400">Relations diplomatiques</span>
-          <span className={`text-xs font-bold ${pays.relation > 60 ? 'text-emerald-400' : pays.relation > 40 ? 'text-amber-400' : 'text-red-400'}`}>
-            {pays.relation}/100
-          </span>
+          <span className={`text-xs font-bold ${pays.relation > 60 ? 'text-emerald-400' : pays.relation > 40 ? 'text-amber-400' : 'text-red-400'}`}>{pays.relation}/100</span>
         </div>
         <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
           <div className={`h-full rounded-full ${pays.relation > 60 ? 'bg-emerald-500' : pays.relation > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
@@ -555,30 +489,25 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
       {pays.echanges_key ? (
         <>
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">⚡ Échanges électriques</p>
-          <div className={`rounded-xl border p-3 mb-3 flex items-center justify-between ${
-            export_ === null ? 'bg-slate-800/50 border-slate-700/40' :
-            export_ ? 'bg-green-950/40 border-green-700/40' : 'bg-red-950/40 border-red-700/40'
-          }`}>
+          <div className={`rounded-xl border p-3 mb-3 flex items-center justify-between ${exp === null ? 'bg-slate-800/50 border-slate-700/40' : exp ? 'bg-green-950/40 border-green-700/40' : 'bg-red-950/40 border-red-700/40'}`}>
             <div>
               <p className="text-[10px] text-slate-400">Solde actuel</p>
-              <p className={`text-xl font-bold tabular-nums mt-0.5 ${export_ === null ? 'text-slate-400' : export_ ? 'text-green-300' : 'text-red-300'}`}>
-                {fmtMW(mw_solde)}
-              </p>
+              <p className={`text-xl font-bold tabular-nums mt-0.5 ${exp === null ? 'text-slate-400' : exp ? 'text-green-300' : 'text-red-300'}`}>{fmtMW(mw)}</p>
             </div>
             <div className="text-right">
-              {export_ !== null && <p className={`text-xs font-semibold ${export_ ? 'text-green-400' : 'text-red-400'}`}>{export_ ? '▲ Export FR' : '▼ Import FR'}</p>}
-              {util_pct != null && <p className="text-[10px] text-slate-500 mt-1">{util_pct}% capacité</p>}
+              {exp !== null && <p className={`text-xs font-semibold ${exp ? 'text-green-400' : 'text-red-400'}`}>{exp ? '▲ Export FR' : '▼ Import FR'}</p>}
+              {util != null && <p className="text-[10px] text-slate-500 mt-1">{util}% capacité</p>}
             </div>
           </div>
-          {cap && mw_solde != null && (
+          {cap && mw != null && (
             <div className="mb-3">
               <div className="flex justify-between mb-1">
                 <span className="text-[10px] text-slate-500">Utilisation interconnexion</span>
                 <span className="text-[10px] text-slate-500">Cap. {cap >= 1000 ? `${cap/1000} GW` : `${cap} MW`}</span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${export_ ? 'bg-green-500' : 'bg-red-500'}`}
-                  style={{ width: `${Math.min(100, util_pct)}%`, opacity: 0.8 }} />
+                <div className={`h-full rounded-full ${exp ? 'bg-green-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min(100, util)}%`, opacity: 0.8 }} />
               </div>
             </div>
           )}
@@ -600,10 +529,6 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
     </div>
   )
 }
-
-// ─────────────────────────────────────────────────────────────
-// PANNEAU ÉNERGIE LATÉRAL
-// ─────────────────────────────────────────────────────────────
 
 function PanneauEnergieLatéral({ etatJeu, onFermer }) {
   return (
@@ -644,26 +569,33 @@ export default function Carte({ etatJeu }) {
       fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson').then(r => r.json()),
       fetch('https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson').then(r => r.json()).catch(() => null),
     ]).then(([france, europe]) => {
-      setGeoFrance(france); setGeoEurope(europe); setLoading(false)
+      setGeoFrance(france)
+      setGeoEurope(europe)
+      setLoading(false)
     }).catch(() => { setError('Impossible de charger la carte.'); setLoading(false) })
   }, [])
 
   useEffect(() => {
     if (!geoFrance || !svgRef.current) return
 
-    const W = 760, H = 840
+    const W = 760, H = 760
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
     svg.attr('viewBox', `0 0 ${W} ${H}`)
+    // Ajouter defs une fois pour les clipPaths
+    svg.append('defs')
     svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0c1520')
 
+    // Projection principale France métro
     const proj = d3.geoConicConformal()
-      .center([2.454071, 46.279229]).scale(2100)
-      .translate([W / 2 - 30, H / 2 - 130])
+      .center([2.454071, 46.279229])
+      .scale(2100)
+      .translate([W / 2 - 30, H / 2 - 80])
+
     const path = d3.geoPath().projection(proj)
     const europeISOs = Object.keys(PAYS_DATA)
 
-    // ── Pays européens ──
+    // ── Pays européens ────────────────────────────────────────
     if (geoEurope?.features) {
       const paysF = geoEurope.features.filter(f => {
         const iso = f.properties?.ISO3 ?? f.properties?.iso_a3 ?? f.properties?.ADM0_A3 ?? ''
@@ -701,7 +633,7 @@ export default function Carte({ etatJeu }) {
         }
       })
     } else {
-      // fallback rectangles Europe
+      // Fallback rectangles
       [{ code:'GBR',x:185,y:25,w:130,h:55 },{ code:'BEL',x:390,y:25,w:90,h:45 },
        { code:'DEU',x:535,y:72,w:135,h:155 },{ code:'CHE',x:545,y:300,w:130,h:85 },
        { code:'ITA',x:575,y:395,w:130,h:150 },{ code:'ESP',x:65,y:505,w:185,h:100 }
@@ -717,18 +649,23 @@ export default function Carte({ etatJeu }) {
       })
     }
 
-    // ── Métropole ──
+    // ── Métropole ─────────────────────────────────────────────
     const metro = geoFrance.features.filter(f => !DROM_CODES.includes(f.properties.code))
+
     const gDeps = svg.append('g').attr('id', 'metropole')
     gDeps.selectAll('path').data(metro).enter().append('path')
       .attr('d', path)
       .attr('fill', d => getCouleurTerritoire(d.properties.code, mode, etatJeu))
       .attr('fill-opacity', 0.88).attr('stroke', '#0c1520').attr('stroke-width', 0.5)
       .style('cursor', 'pointer')
-      .on('mouseover', function() { d3.select(this).attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1.5) })
+      .on('mouseover', function(event, d) {
+        d3.select(this).attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1.5)
+      })
       .on('mouseout', function(event, d) {
         const isSel = selected?.type === 'dep' && selected?.feature?.properties?.code === d.properties.code
-        d3.select(this).attr('fill-opacity', 0.88).attr('stroke', isSel ? '#fff' : '#0c1520').attr('stroke-width', isSel ? 2 : 0.5)
+        d3.select(this).attr('fill-opacity', 0.88)
+          .attr('stroke', isSel ? '#fff' : '#0c1520')
+          .attr('stroke-width', isSel ? 2 : 0.5)
       })
       .on('click', function(event, d) {
         setPanneauEnergie(false)
@@ -741,23 +678,23 @@ export default function Carte({ etatJeu }) {
       .attr('fill','white').attr('fill-opacity',0.5).attr('font-size',5.5).attr('pointer-events','none')
       .text(d => d.properties.code)
 
-    // ── Séparateur DROM ──
-    const SEP1 = 635
-    svg.append('line').attr('x1',10).attr('y1',SEP1).attr('x2',W-10).attr('y2',SEP1)
-      .attr('stroke','#1e3a5f').attr('stroke-width',1).attr('stroke-dasharray','5,4')
-    svg.append('text').attr('x',12).attr('y',SEP1 - 4)
-      .attr('fill','#334155').attr('font-size',7.5)
+    // ── Zoom Île-de-France ────────────────────────────────────
+    const idfFeatures = geoFrance.features.filter(f => IDF_CODES.includes(f.properties.code))
+    dessinerZoomIDF(svg, idfFeatures, mode, etatJeu, (feature) => {
+      setPanneauEnergie(false)
+      setSelected(p => p?.type==='dep'&&p?.feature?.properties?.code===feature.properties.code ? null : { type:'dep', feature })
+    })
+
+    // ── Séparateur DROM ───────────────────────────────────────
+    const SEP_Y = 626
+    svg.append('line')
+      .attr('x1', 10).attr('y1', SEP_Y).attr('x2', W - 10).attr('y2', SEP_Y)
+      .attr('stroke', '#1e3a5f').attr('stroke-width', 1).attr('stroke-dasharray', '5,4')
+    svg.append('text').attr('x', 12).attr('y', SEP_Y - 4)
+      .attr('fill', '#334155').attr('font-size', 8)
       .text('▶ DROM — Départements et Régions d\'Outre-Mer')
 
-    // ── Séparateur COM ──
-    const SEP2 = 738
-    svg.append('line').attr('x1',10).attr('y1',SEP2).attr('x2',W-10).attr('y2',SEP2)
-      .attr('stroke','#1e3a5f').attr('stroke-width',1).attr('stroke-dasharray','3,4')
-    svg.append('text').attr('x',12).attr('y',SEP2 - 4)
-      .attr('fill','#334155').attr('font-size',7.5)
-      .text('▶ COM — Collectivités d\'Outre-Mer')
-
-    // ── DROM ──
+    // ── DROM ─────────────────────────────────────────────────
     geoFrance.features.filter(f => DROM_CODES.includes(f.properties.code)).forEach(feature => {
       const code = feature.properties.code
       const cfg  = DROM_CONFIG[code]
@@ -768,20 +705,12 @@ export default function Carte({ etatJeu }) {
       })
     })
 
-    // ── COM ──
-    Object.keys(COM_CONFIG).forEach(code => {
-      dessinerCom(svg, code, mode, etatJeu, (c, nom, isDrom) => {
-        setPanneauEnergie(false)
-        setSelected(p => p?.type==='territoire'&&p.code===c ? null : { type:'territoire', code:c, nom, isDrom })
-      })
-    })
-
-    // ── Bandeau énergie ──
+    // ── Bandeau énergie ───────────────────────────────────────
     if (mode === 'energie') {
       const solde = etatJeu?.echanges_mw?.solde_total ?? null
       const pos   = solde != null ? solde >= 0 : true
       const lbl   = solde != null
-        ? `${pos ? '+' : ''}${Math.abs(solde) >= 1000 ? `${(solde/1000).toFixed(1)} GW` : `${Math.round(solde)} MW`}`
+        ? `${pos?'+':''}${Math.abs(solde)>=1000?`${(solde/1000).toFixed(1)} GW`:`${Math.round(solde)} MW`}`
         : '— MW'
       svg.append('rect').attr('x',W/2-108).attr('y',H-76).attr('width',216).attr('height',48)
         .attr('rx',10).attr('fill',pos?'#14532d':'#7f1d1d').attr('stroke',pos?'#16a34a':'#dc2626').attr('stroke-width',1)
@@ -844,6 +773,7 @@ export default function Carte({ etatJeu }) {
         )}
       </div>
 
+      {/* Légende */}
       <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
         <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">Légende — {MODES.find(m => m.id === mode)?.label}</p>
         {mode === 'politique' && (
@@ -877,13 +807,14 @@ export default function Carte({ etatJeu }) {
         )}
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: '❤️ Popularité',  val: `${Math.round(etatJeu?.popularite_joueur ?? 42)}%`,      color: (etatJeu?.popularite_joueur ?? 42) < 35 ? 'text-red-400' : 'text-emerald-400' },
-          { label: '🔥 Tension',     val: `${Math.round(etatJeu?.tension_sociale ?? 45)}/100`,      color: (etatJeu?.tension_sociale ?? 45) > 65 ? 'text-red-400' : 'text-amber-400' },
-          { label: '⚡ Électricité', val: `${Math.round(etatJeu?.prix_electricite ?? 95)} €/MWh`,   color: (etatJeu?.prix_electricite ?? 95) > 100 ? 'text-red-400' : 'text-blue-400' },
-          { label: '☢️ Nucléaire',   val: `${etatJeu?.part_nucleaire_mix_pct ?? 68}%`,              color: 'text-blue-300' },
-          { label: '📅 Date',        val: etatJeu?.date ?? '1er Mars 2026',                         color: 'text-slate-400' },
+          { label: '❤️ Popularité',  val: `${Math.round(etatJeu?.popularite_joueur ?? 42)}%`,     color: (etatJeu?.popularite_joueur ?? 42) < 35 ? 'text-red-400' : 'text-emerald-400' },
+          { label: '🔥 Tension',     val: `${Math.round(etatJeu?.tension_sociale ?? 45)}/100`,     color: (etatJeu?.tension_sociale ?? 45) > 65 ? 'text-red-400' : 'text-amber-400' },
+          { label: '⚡ Électricité', val: `${Math.round(etatJeu?.prix_electricite ?? 95)} €/MWh`,  color: (etatJeu?.prix_electricite ?? 95) > 100 ? 'text-red-400' : 'text-blue-400' },
+          { label: '☢️ Nucléaire',   val: `${etatJeu?.part_nucleaire_mix_pct ?? 68}%`,             color: 'text-blue-300' },
+          { label: '📅 Date',        val: etatJeu?.date ?? '1er Mars 2026',                        color: 'text-slate-400' },
         ].map(({ label, val, color }) => (
           <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center">
             <p className="text-xs text-slate-500">{label}</p>
