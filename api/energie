@@ -1,234 +1,55 @@
-// api/energie.js — Proxy Vercel pour les données énergétiques réelles
+// api/energie.js — Proxy Vercel minimal
 //
-// SOURCE PRINCIPALE : ODRÉ éCO2mix (opendata.reseaux-energies.fr)
-//   → Sans inscription, sans token, mise à jour toutes les 15 minutes
-//   → Champs : mix production, CO₂, consommation, échanges frontaliers
+// ODRÉ éCO2mix est appelé directement depuis le navigateur (CORS ouvert)
+// Ce proxy ne gère que OilPriceAPI qui n'autorise pas les appels CORS directs.
 //
-// SOURCE OPTIONNELLE : OilPriceAPI (oilpriceapi.com)
-//   → Variable d'environnement : OIL_PRICE_API_KEY
-//   → Trial gratuit 7 jours sur oilpriceapi.com
-//   → Sans clé : fallback sur valeur contextuelle Mars 2026
-
-const ODRE_BASE = 'https://opendata.reseaux-energies.fr/api/explore/v2.1/catalog/datasets'
-const DATASET_TR = 'eco2mix-national-tr' // temps réel, MAJ toutes les 15 min
-
-// Champs utiles du dataset éCO2mix
-const FIELDS = [
-  'date_heure',
-  'consommation',
-  'prevision_j',
-  'prevision_j1',
-  'nucleaire',
-  'eolien',
-  'eolien_terrestre',
-  'eolien_offshore',
-  'solaire',
-  'hydraulique',
-  'pompage',
-  'fioul',
-  'charbon',
-  'gaz',
-  'bioenergies',
-  'taux_co2',
-  // Échanges physiques aux frontières (positif = importation vers France)
-  'ech_physiques',
-  // Échanges commerciaux par pays
-  'ech_comm_angleterre',
-  'ech_comm_espagne',
-  'ech_comm_italie',
-  'ech_comm_suisse',
-  'ech_comm_allemagne_belgique',
-].join(',')
+// Variable d'environnement optionnelle sur Vercel :
+//   OIL_PRICE_API_KEY → clé oilpriceapi.com (trial gratuit 7 jours)
+//
+// Sans clé : retourne null → le client utilise la valeur contextuelle (88$)
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  // CORS — autoriser les appels depuis le navigateur
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET')
+
   const result = {
-    source: {},
-    timestamp: new Date().toISOString(),
-
-    // Mix de production (MW)
-    production: {
-      nucleaire_mw:    null,
-      eolien_mw:       null,
-      solaire_mw:      null,
-      hydraulique_mw:  null,
-      gaz_mw:          null,
-      charbon_mw:      null,
-      fioul_mw:        null,
-      bioenergies_mw:  null,
-      total_mw:        null,
-    },
-
-    // Parts du mix (%)
-    mix_pct: {
-      nucleaire:   null,
-      eolien:      null,
-      solaire:     null,
-      hydraulique: null,
-      gaz:         null,
-      charbon:     null,
-      fioul:       null,
-      bioenergies: null,
-      renouvelable: null, // éolien + solaire + hydro + bio
-    },
-
-    // Consommation (MW)
-    consommation: {
-      realisee_mw:   null,
-      prevision_j:   null,
-      prevision_j1:  null,
-    },
-
-    // Émissions carbone
-    taux_co2_g_kwh: null,
-
-    // Échanges frontaliers (MW) — convention : positif = export France, négatif = import France
-    echanges_mw: {
-      angleterre:          null,
-      espagne:             null,
-      italie:              null,
-      suisse:              null,
-      allemagne_belgique:  null,
-      solde_total:         null,
-    },
-
-    // Prix baril
     prix_baril_dollars: null,
+    source_baril: 'non_configure',
+    timestamp: new Date().toISOString(),
   }
 
-  // ── 1. ODRÉ éCO2mix temps réel ──────────────────────────────
-  try {
-    const url = `${ODRE_BASE}/${DATASET_TR}/records?limit=1&order_by=date_heure%20DESC&select=${FIELDS}&timezone=Europe%2FParis`
-    const odreRes = await fetch(url, { signal: AbortSignal.timeout(6000) })
-
-    if (odreRes.ok) {
-      const odreData = await odreRes.json()
-      const r = odreData?.results?.[0]
-
-      if (r) {
-        // Production par filière (MW)
-        const nuc  = r.nucleaire    ?? 0
-        const eol  = (r.eolien_terrestre ?? 0) + (r.eolien_offshore ?? 0) || (r.eolien ?? 0)
-        const sol  = r.solaire      ?? 0
-        const hyd  = r.hydraulique  ?? 0
-        const gaz  = r.gaz          ?? 0
-        const cha  = r.charbon      ?? 0
-        const fio  = r.fioul        ?? 0
-        const bio  = r.bioenergies  ?? 0
-        const total = nuc + eol + sol + hyd + gaz + cha + fio + bio
-
-        result.production = {
-          nucleaire_mw:   nuc,
-          eolien_mw:      eol,
-          solaire_mw:     sol,
-          hydraulique_mw: hyd,
-          gaz_mw:         gaz,
-          charbon_mw:     cha,
-          fioul_mw:       fio,
-          bioenergies_mw: bio,
-          total_mw:       total,
-        }
-
-        // Mix en pourcentage
-        if (total > 0) {
-          const pct = v => Math.round((v / total) * 100)
-          result.mix_pct = {
-            nucleaire:    pct(nuc),
-            eolien:       pct(eol),
-            solaire:      pct(sol),
-            hydraulique:  pct(hyd),
-            gaz:          pct(gaz),
-            charbon:      pct(cha),
-            fioul:        pct(fio),
-            bioenergies:  pct(bio),
-            renouvelable: pct(eol + sol + hyd + bio),
-          }
-        }
-
-        // Consommation
-        result.consommation = {
-          realisee_mw:  r.consommation ?? null,
-          prevision_j:  r.prevision_j  ?? null,
-          prevision_j1: r.prevision_j1 ?? null,
-        }
-
-        // CO₂
-        result.taux_co2_g_kwh = r.taux_co2 ?? null
-
-        // Échanges frontaliers
-        // Convention ODRÉ : négatif = exportation française, positif = importation
-        // On inverse pour avoir : positif = export France (plus intuitif pour le jeu)
-        const eng = -(r.ech_comm_angleterre         ?? 0)
-        const esp = -(r.ech_comm_espagne             ?? 0)
-        const ita = -(r.ech_comm_italie              ?? 0)
-        const sui = -(r.ech_comm_suisse              ?? 0)
-        const deb = -(r.ech_comm_allemagne_belgique  ?? 0)
-        result.echanges_mw = {
-          angleterre:         eng,
-          espagne:            esp,
-          italie:             ita,
-          suisse:             sui,
-          allemagne_belgique: deb,
-          solde_total:        Math.round(eng + esp + ita + sui + deb),
-        }
-
-        result.source.eco2mix = 'ODRE_LIVE'
-        result.timestamp_eco2mix = r.date_heure
-      }
-    }
-  } catch (e) {
-    console.warn('ODRÉ indisponible:', e.message)
-    result.source.eco2mix = 'erreur'
-  }
-
-  // ── 2. Prix du baril (OilPriceAPI — optionnel) ──────────────
   const OIL_KEY = process.env.OIL_PRICE_API_KEY
   if (OIL_KEY) {
     try {
       const oilRes = await fetch(
         'https://api.oilpriceapi.com/v1/prices/latest?by_code=BRENT_CRUDE_USD',
-        { headers: { Authorization: `Token ${OIL_KEY}` }, signal: AbortSignal.timeout(4000) }
+        {
+          headers: { Authorization: `Token ${OIL_KEY}` },
+          signal: AbortSignal.timeout(4000),
+        }
       )
       if (oilRes.ok) {
-        const oilData = await oilRes.json()
-        if (oilData?.data?.price) {
-          result.prix_baril_dollars = Math.round(oilData.data.price * 10) / 10
-          result.source.baril = 'oilpriceapi'
+        const data = await oilRes.json()
+        if (data?.data?.price) {
+          result.prix_baril_dollars = Math.round(data.data.price * 10) / 10
+          result.source_baril = 'oilpriceapi'
         }
       }
     } catch (e) {
       console.warn('OilPriceAPI indisponible:', e.message)
+      result.source_baril = 'erreur'
     }
   }
 
-  // ── 3. Fallbacks contextuels (Mars 2026 — crise iranienne) ──
-  // Le baril réel est autour de 88-90$ (détroit d'Ormuz sous tension)
+  // Fallback contextuel (Mars 2026, crise iranienne — Brent ~88$)
   if (result.prix_baril_dollars === null) {
     result.prix_baril_dollars = 88
-    result.source.baril = 'fallback_contextuel'
-  }
-
-  // Si ODRÉ a échoué, fallback mix typique France hivernale
-  if (result.production.total_mw === null) {
-    result.production = {
-      nucleaire_mw: 42000, eolien_mw: 8000, solaire_mw: 1000,
-      hydraulique_mw: 9000, gaz_mw: 4000, charbon_mw: 200,
-      fioul_mw: 100, bioenergies_mw: 1500, total_mw: 65800,
-    }
-    result.mix_pct = {
-      nucleaire: 64, eolien: 12, solaire: 2, hydraulique: 14,
-      gaz: 6, charbon: 0, fioul: 0, bioenergies: 2, renouvelable: 30,
-    }
-    result.taux_co2_g_kwh = 52
-    result.consommation = { realisee_mw: 62000, prevision_j: 64000, prevision_j1: 63000 }
-    result.echanges_mw = {
-      angleterre: 1200, espagne: 400, italie: 900,
-      suisse: 1800, allemagne_belgique: -400, solde_total: 3900,
-    }
-    result.source.eco2mix = 'fallback_contextuel'
+    result.source_baril = 'fallback_contextuel'
   }
 
   res.setHeader('Cache-Control', 's-maxage=300') // cache Vercel 5 min
