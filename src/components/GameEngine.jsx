@@ -11,6 +11,7 @@ import {
 } from '../engines/moteur-curseurs.js'
 import { getEtatInitialParti } from '../data/programmes-politiques.js'
 import { chargerDonneesEnergie } from '../engines/moteur-energie-reel.js'
+import { calculerEchangesEnergie } from '../engines/moteur-echanges-energie.js'
 import NotifReformes from './NotifReformes.jsx'
 
 // ─────────────────────────────────────────────────────────────
@@ -250,6 +251,13 @@ export default function GameEngine({ partiJoueur, children }) {
         if (r?.evenements_declenches?.length)
           evs.push(...r.evenements_declenches.map(e => ({ titre: e.titre, emoji: e.theatre_emoji ?? '🌍' })))
       } catch (e) { console.warn('tourMoteurGeopolitique:', e.message) }
+
+      // ── Recalculer les échanges frontaliers ──────────────────
+      try {
+        const r = calculerEchangesEnergie(etat)
+        etat.echanges_mw = r.echanges_mw
+        if (r.evenements?.length) evs.push(...r.evenements)
+      } catch (e) { console.warn('calculerEchangesEnergie:', e.message) }
 
       // Décréments automatiques
       etat.popularite_joueur = Math.max(0, Math.min(100, (etat.popularite_joueur ?? 42) - 0.5))
