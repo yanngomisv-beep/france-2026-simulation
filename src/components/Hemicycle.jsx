@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
 import * as Dialog from '@radix-ui/react-dialog'
 import anime from 'animejs'
+import { getLoisDisponibles } from '../engines/moteur-legislatif.js'
+import { CATALOGUE_LOIS } from '../data/lois/catalogue-lois.js'
 
 // ─────────────────────────────────────────────────────────────
 // COMPOSITION ASSEMBLÉE NATIONALE
@@ -231,15 +233,20 @@ function SequenceVote({ loi, chambre, partis, total, majorite, onTermine, onFerm
             abstention:  compteurRef.current.abstention + votesAbstention,
           }
 
-          // Animer le compteur
-          const target = { ...compteurRef.current }
-          const current = { ...compteurs }
+          // Animer le compteur — objet local détaché, pas de stale closure sur compteurs
+          const animObj = {
+            pour:        compteurRef.current.pour - votesPour,
+            contre:      compteurRef.current.contre - votesContre,
+            abstention:  compteurRef.current.abstention - votesAbstention,
+          }
           anime({
-            targets: current,
-            pour: target.pour, contre: target.contre, abstention: target.abstention,
+            targets: animObj,
+            pour: compteurRef.current.pour,
+            contre: compteurRef.current.contre,
+            abstention: compteurRef.current.abstention,
             duration: 400,
             easing: 'easeOutExpo',
-            update: () => setCompteurs({ pour: Math.round(current.pour), contre: Math.round(current.contre), abstention: Math.round(current.abstention) }),
+            update: () => setCompteurs({ pour: Math.round(animObj.pour), contre: Math.round(animObj.contre), abstention: Math.round(animObj.abstention) }),
           })
 
           setEtatVote(prev => ({ ...prev, [parti.id]: resultat }))
@@ -360,7 +367,7 @@ function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
 
   function handleResultatAN(res) {
     setResultatAN(res)
-    const necessite_senat = LOIS_BICAMERALES.includes(loi?.id) || !res.adopte === false
+    const necessite_senat = LOIS_BICAMERALES.includes(loi?.id) || res.adopte
     if (!res.adopte) {
       // Rejeté à l'AN → terminé
       setTimeout(() => { setPhase('DONE'); onRejete?.() }, 1500)
@@ -512,7 +519,7 @@ function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
 // COMPOSANT PRINCIPAL
 // ─────────────────────────────────────────────────────────────
 
-export default function Hemicycle({ etatJeu, voterLoi }) {
+export default function Hemicycle({ etatJeu, voterLoi, bonusVote = 0 }) {
   const [vue, setVue]                   = useState('AN')        // AN | SENAT
   const [siegeSelectionne, setSiegeSel] = useState(null)
   const [modalVote, setModalVote]       = useState(null)        // loi en cours de vote
@@ -528,12 +535,16 @@ export default function Hemicycle({ etatJeu, voterLoi }) {
 
   const partiSel = siegeSelectionne ? partis.find(p => p.id === siegeSelectionne.parti) : null
 
-  // Lois adoptées récupérées depuis etatJeu
-  const loisAdoptees = etatJeu?.lois_votees ?? []
+  // Bug fix : afficher les lois DISPONIBLES (pas encore votées), pas les adoptées
+  const loisDisponibles = useMemo(() => {
+    if (!etatJeu) return []
+    try { return getLoisDisponibles(etatJeu) }
+    catch { return CATALOGUE_LOIS?.filter(l => !(etatJeu?.lois_votees ?? []).includes(l.id)) ?? [] }
+  }, [etatJeu])
 
   function handleAdopte() {
     if (modalVote) {
-      voterLoi?.(modalVote.id, 0)
+      voterLoi?.(modalVote.id, bonusVote)
       setHistorique(h => [{
         loi: modalVote,
         resultat: 'adoptee',
@@ -638,27 +649,42 @@ export default function Hemicycle({ etatJeu, voterLoi }) {
         ))}
       </div>
 
-      {/* Section vote — lois disponibles */}
+      {/* Section vote — lois disponibles (cliquables) */}
       {etatJeu && (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-          <h3 className="text-sm font-bold text-slate-300 mb-3">🗳️ Soumettre une loi au vote</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-300">🗳️ Soumettre une loi au vote</h3>
+            <span className="text-xs text-slate-500">{loisDisponibles.length} loi{loisDisponibles.length !== 1 ? 's' : ''} disponible{loisDisponibles.length !== 1 ? 's' : ''}</span>
+          </div>
           <p className="text-xs text-slate-500 mb-3">
-            Cliquez sur une loi pour déclencher la séquence de vote complète (Assemblée → Sénat → CMP si nécessaire).
+            Cliquez sur une loi pour déclencher la séquence AN → Sénat → CMP si nécessaire.
+            {LOIS_BICAMERALES.length > 0 && <span className="text-blue-400"> Les lois constitutionnelles passent obligatoirement par le Sénat.</span>}
           </p>
-          {loisAdoptees.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-emerald-400 font-semibold">{loisAdoptees.length} loi{loisAdoptees.length > 1 ? 's' : ''} dans le registre législatif</p>
-              {loisAdoptees.slice(0, 3).map(id => (
-                <div key={id} className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900 rounded px-3 py-1.5">
-                  <span className="text-emerald-400">✅</span>
-                  <span>{id.replace(/_/g, ' ')}</span>
-                </div>
+          {loisDisponibles.length > 0 ? (
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+              {loisDisponibles.map(loi => (
+                <button
+                  key={loi.id}
+                  onClick={() => setModalVote(loi)}
+                  className="flex items-center gap-3 text-left text-xs bg-slate-900 hover:bg-slate-800 border border-slate-700/50 hover:border-blue-600/50 rounded-lg px-3 py-2.5 transition-all group"
+                >
+                  <span className="text-base flex-shrink-0">{loi.emoji ?? '📋'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-200 font-semibold truncate group-hover:text-white">{loi.titre}</p>
+                    {loi.description && <p className="text-slate-500 truncate mt-0.5">{loi.description}</p>}
+                  </div>
+                  {LOIS_BICAMERALES.includes(loi.id) && (
+                    <span className="text-[9px] text-blue-400 bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.5 rounded flex-shrink-0">BICAMÉRAL</span>
+                  )}
+                  <span className="text-slate-600 group-hover:text-blue-400 transition-colors flex-shrink-0">▶</span>
+                </button>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-slate-500 italic">
-              Allez dans l'onglet Lois pour soumettre des lois au vote — elles apparaîtront ici une fois votées.
-            </p>
+            <div className="text-center py-4">
+              <p className="text-xs text-slate-500 italic">Toutes les lois disponibles ont déjà été votées.</p>
+              <p className="text-xs text-slate-600 mt-1">Ajoutez des lois dans le catalogue ou passez au tour suivant.</p>
+            </div>
           )}
         </div>
       )}
