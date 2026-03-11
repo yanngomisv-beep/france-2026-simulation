@@ -41,17 +41,19 @@ const CAP_MAX = { angleterre: 2000, allemagne_belgique: 3500, suisse: 3500, ital
 
 const DROM_CODES = ['971', '972', '973', '974', '976']
 
+// viewBox global : W=900, H=1050
+// Métropole occupe y:0→780, DROM y:800→940, IDF encart y:800→940 (droite)
 const DROM_CONFIG = {
   '971': { nom: 'Guadeloupe',  pop: '400 000 hab.', chef: 'Basse-Terre',
-           encartX: 18,  encartY: 648, encartW: 94, encartH: 82 },
+           encartX: 18,  encartY: 805, encartW: 130, encartH: 115 },
   '972': { nom: 'Martinique',  pop: '360 000 hab.', chef: 'Fort-de-France',
-           encartX: 122, encartY: 648, encartW: 82, encartH: 82 },
+           encartX: 158, encartY: 805, encartW: 112, encartH: 115 },
   '973': { nom: 'Guyane',      pop: '300 000 hab.', chef: 'Cayenne',
-           encartX: 214, encartY: 636, encartW: 98, encartH: 94 },
+           encartX: 280, encartY: 795, encartW: 130, encartH: 125 },
   '974': { nom: 'La Réunion',  pop: '900 000 hab.', chef: 'Saint-Denis',
-           encartX: 322, encartY: 648, encartW: 86, encartH: 82 },
+           encartX: 420, encartY: 805, encartW: 118, encartH: 115 },
   '976': { nom: 'Mayotte',     pop: '320 000 hab.', chef: 'Mamoudzou',
-           encartX: 418, encartY: 652, encartW: 78, encartH: 78 },
+           encartX: 548, encartY: 808, encartW: 104, encartH: 112 },
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -60,7 +62,8 @@ const DROM_CONFIG = {
 
 const IDF_CODES = ['75', '77', '78', '91', '92', '93', '94', '95']
 
-const IDF_ENCART = { x: 530, y: 636, w: 218, h: 130 }
+// Encart IDF : à droite des DROM, même bande horizontale
+const IDF_ENCART = { x: 662, y: 795, w: 226, h: 135 }
 
 // ─────────────────────────────────────────────────────────────
 // COULEURS
@@ -578,7 +581,7 @@ export default function Carte({ etatJeu }) {
   useEffect(() => {
     if (!geoFrance || !svgRef.current) return
 
-    const W = 760, H = 760
+    const W = 900, H = 1050
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
     svg.attr('viewBox', `0 0 ${W} ${H}`)
@@ -589,8 +592,8 @@ export default function Carte({ etatJeu }) {
     // Projection principale France métro
     const proj = d3.geoConicConformal()
       .center([2.454071, 46.279229])
-      .scale(2100)
-      .translate([W / 2 - 30, H / 2 - 80])
+      .scale(2700)
+      .translate([W / 2 - 10, H / 2 - 155])
 
     const path = d3.geoPath().projection(proj)
     const europeISOs = Object.keys(PAYS_DATA)
@@ -686,7 +689,7 @@ export default function Carte({ etatJeu }) {
     })
 
     // ── Séparateur DROM ───────────────────────────────────────
-    const SEP_Y = 626
+    const SEP_Y = 782
     svg.append('line')
       .attr('x1', 10).attr('y1', SEP_Y).attr('x2', W - 10).attr('y2', SEP_Y)
       .attr('stroke', '#1e3a5f').attr('stroke-width', 1).attr('stroke-dasharray', '5,4')
