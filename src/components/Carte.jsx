@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import { COULEURS_PARTIS, getPolitiqueDepartement } from '../data/departements-svg.js'
+import PanneauEnergie from './PanneauEnergie.jsx'
 
 // ─────────────────────────────────────────────────────────────
 // CONFIG MODES
@@ -15,20 +16,27 @@ const MODES = [
 ]
 
 // ─────────────────────────────────────────────────────────────
-// DONNÉES PAYS EUROPÉENS
+// DONNÉES PAYS EUROPÉENS (relations diplomatiques uniquement)
+// Les échanges électriques viennent de etatJeu.echanges_mw
 // ─────────────────────────────────────────────────────────────
 
 const PAYS_DATA = {
-  "ESP": { nom: "Espagne",      emoji: "🇪🇸", import_twh: 4.2,  export_twh: 12.8, solde: +8.6,  relation: 55, tension: 42 },
-  "ITA": { nom: "Italie",       emoji: "🇮🇹", import_twh: 2.1,  export_twh: 15.2, solde: +13.1, relation: 60, tension: 38 },
-  "CHE": { nom: "Suisse",       emoji: "🇨🇭", import_twh: 8.5,  export_twh: 6.2,  solde: -2.3,  relation: 72, tension: 25 },
-  "DEU": { nom: "Allemagne",    emoji: "🇩🇪", import_twh: 18.2, export_twh: 9.8,  solde: -8.4,  relation: 65, tension: 44 },
-  "BEL": { nom: "Belgique",     emoji: "🇧🇪", import_twh: 3.2,  export_twh: 22.1, solde: +18.9, relation: 68, tension: 48 },
-  "LUX": { nom: "Luxembourg",   emoji: "🇱🇺", import_twh: 0.1,  export_twh: 4.8,  solde: +4.7,  relation: 70, tension: 22 },
-  "GBR": { nom: "Royaume-Uni",  emoji: "🇬🇧", import_twh: 5.8,  export_twh: 8.2,  solde: +2.4,  relation: 48, tension: 52 },
-  "AND": { nom: "Andorre",      emoji: "🇦🇩", import_twh: 0.0,  export_twh: 0.5,  solde: +0.5,  relation: 80, tension: 10 },
-  "MCO": { nom: "Monaco",       emoji: "🇲🇨", import_twh: 0.0,  export_twh: 0.1,  solde: +0.1,  relation: 85, tension: 8  },
-  "NLD": { nom: "Pays-Bas",     emoji: "🇳🇱", import_twh: 0.0,  export_twh: 3.1,  solde: +3.1,  relation: 62, tension: 35 },
+  "ESP": { nom: "Espagne",      emoji: "🇪🇸", echanges_key: "espagne",             relation: 55, tension: 42 },
+  "ITA": { nom: "Italie",       emoji: "🇮🇹", echanges_key: "italie",              relation: 60, tension: 38 },
+  "CHE": { nom: "Suisse",       emoji: "🇨🇭", echanges_key: "suisse",              relation: 72, tension: 25 },
+  "DEU": { nom: "Allemagne",    emoji: "🇩🇪", echanges_key: "allemagne_belgique",  relation: 65, tension: 44 },
+  "BEL": { nom: "Belgique",     emoji: "🇧🇪", echanges_key: "allemagne_belgique",  relation: 68, tension: 48 },
+  "LUX": { nom: "Luxembourg",   emoji: "🇱🇺", echanges_key: null,                  relation: 70, tension: 22 },
+  "GBR": { nom: "Royaume-Uni",  emoji: "🇬🇧", echanges_key: "angleterre",          relation: 48, tension: 52 },
+  "AND": { nom: "Andorre",      emoji: "🇦🇩", echanges_key: null,                  relation: 80, tension: 10 },
+  "MCO": { nom: "Monaco",       emoji: "🇲🇨", echanges_key: null,                  relation: 85, tension:  8 },
+  "NLD": { nom: "Pays-Bas",     emoji: "🇳🇱", echanges_key: null,                  relation: 62, tension: 35 },
+}
+
+// Capacités d'interconnexion max (MW) pour normaliser les barres
+const CAP_MAX = {
+  angleterre: 2000, allemagne_belgique: 3500,
+  suisse: 3500, italie: 3900, espagne: 800,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -54,7 +62,6 @@ function getCouleurDep(code, mode, etatJeu) {
   if (mode === 'politique') return COULEURS_PARTIS[pol.parti] ?? '#94a3b8'
   if (mode === 'tension') {
     const t = Math.min(1, (etatJeu?.tension_sociale ?? 45) / 100)
-    // variation légère par département pour ne pas être uniforme
     const seed = code.charCodeAt(0) / 200
     const tv = Math.min(1, Math.max(0, t + (seed - 0.5) * 0.2))
     return `rgb(${Math.round(60 + tv*195)},${Math.round(120 - tv*110)},${Math.round(60 - tv*55)})`
@@ -67,16 +74,14 @@ function getCouleurDep(code, mode, etatJeu) {
   }
   if (mode === 'energie') {
     const nuc = etatJeu?.part_nucleaire_mix_pct ?? 68
-    const ren = etatJeu?.part_renouvelable_mix_pct ?? 24
     const t = nuc / 100
-    return `rgb(${Math.round(30 + t * 30)},${Math.round(80 + t * 100)},${Math.round(150 + t * 80)})`
+    return `rgb(${Math.round(30 + t*30)},${Math.round(80 + t*100)},${Math.round(150 + t*80)})`
   }
   if (mode === 'chomage') {
-    // Taux fictif par département lié à tension sociale
     const seed = ((code.charCodeAt(0) * 17 + (code.charCodeAt(1) ?? 1) * 5) % 100) / 100
     const base = (etatJeu?.tension_sociale ?? 45) / 100
     const t = Math.min(1, Math.max(0, base * 0.7 + seed * 0.3))
-    return `rgb(${Math.round(200 * t)},${Math.round(160 - 120 * t)},${Math.round(30 + 20 * t)})`
+    return `rgb(${Math.round(200*t)},${Math.round(160-120*t)},${Math.round(30+20*t)})`
   }
   return '#475569'
 }
@@ -86,16 +91,35 @@ function getCouleurPays(code, mode, etatJeu) {
   if (!p) return '#1e293b'
   if (mode === 'tension') {
     const t = p.tension / 100
-    return `rgb(${Math.round(60 + t*195)},${Math.round(120 - t*110)},${Math.round(60 - t*55)})`
+    return `rgb(${Math.round(60+t*195)},${Math.round(120-t*110)},${Math.round(60-t*55)})`
   }
   if (mode === 'energie') {
-    return p.solde > 0 ? '#14532d' : '#7f1d1d'
+    // Couleur dynamique basée sur les échanges réels
+    if (!p.echanges_key) return '#1e3a5f'
+    const mw = etatJeu?.echanges_mw?.[p.echanges_key] ?? 0
+    return mw > 0 ? '#14532d' : '#7f1d1d'
   }
   return '#1e3a5f'
 }
 
+// Solde échange pour un pays ISO depuis etatJeu
+function getSoldePays(code, etatJeu) {
+  const p = PAYS_DATA[code]
+  if (!p?.echanges_key) return null
+  const mw = etatJeu?.echanges_mw?.[p.echanges_key]
+  return mw ?? null
+}
+
+function fmtMW(mw) {
+  if (mw == null) return '—'
+  const abs = Math.abs(mw)
+  const s = mw >= 0 ? '+' : ''
+  if (abs >= 1000) return `${s}${(mw / 1000).toFixed(1)} GW`
+  return `${s}${Math.round(mw)} MW`
+}
+
 // ─────────────────────────────────────────────────────────────
-// PANNEAUX INFO
+// PANNEAU DÉPARTEMENT
 // ─────────────────────────────────────────────────────────────
 
 function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
@@ -111,7 +135,7 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
           <h3 className="font-bold text-white text-base">{nom}</h3>
           <p className="text-xs text-slate-500">Département {code}</p>
         </div>
-        <button onClick={onFermer} className="text-slate-500 hover:text-white transition-colors">✕</button>
+        <button onClick={onFermer} className="text-slate-500 hover:text-white transition-colors text-lg leading-none">✕</button>
       </div>
 
       {/* Parti politique */}
@@ -124,11 +148,10 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
         </div>
       </div>
 
-      {/* Stats contextuelles selon mode */}
       {mode === 'tension' && (
         <div className="mb-3 p-2.5 rounded-lg bg-red-950/40 border border-red-800/30">
-          <p className="text-xs text-red-400 font-semibold">Tension sociale</p>
-          <div className="flex items-center gap-2 mt-1">
+          <p className="text-xs text-red-400 font-semibold mb-1.5">Tension sociale</p>
+          <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div className="h-full bg-red-500 rounded-full"
                 style={{ width: `${etatJeu?.tension_sociale ?? 45}%` }} />
@@ -139,8 +162,8 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
       )}
       {mode === 'popularite' && (
         <div className="mb-3 p-2.5 rounded-lg bg-blue-950/40 border border-blue-800/30">
-          <p className="text-xs text-blue-400 font-semibold">Popularité dans ce département</p>
-          <div className="flex items-center gap-2 mt-1">
+          <p className="text-xs text-blue-400 font-semibold mb-1.5">Popularité dans ce département</p>
+          <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full"
                 style={{ width: `${etatJeu?.popularite_joueur ?? 42}%` }} />
@@ -151,23 +174,29 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
       )}
       {mode === 'energie' && (
         <div className="mb-3 p-2.5 rounded-lg bg-blue-950/40 border border-blue-800/30">
-          <p className="text-xs text-blue-400 font-semibold">Mix énergétique</p>
-          <div className="flex gap-3 mt-2">
+          <p className="text-xs text-blue-400 font-semibold mb-2">Mix énergétique national</p>
+          <div className="grid grid-cols-2 gap-2">
             <div className="text-center">
-              <p className="text-lg font-black text-blue-300">{etatJeu?.part_nucleaire_mix_pct ?? 68}%</p>
-              <p className="text-xs text-slate-500">Nucléaire</p>
+              <p className="text-lg font-black text-indigo-300">{etatJeu?.part_nucleaire_mix_pct ?? 68}%</p>
+              <p className="text-xs text-slate-500">⚛️ Nucléaire</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-black text-green-300">{etatJeu?.part_renouvelable_mix_pct ?? 24}%</p>
-              <p className="text-xs text-slate-500">Renouvelable</p>
+              <p className="text-xs text-slate-500">🌿 Renouvelable</p>
             </div>
+            {etatJeu?.taux_co2_g_kwh != null && (
+              <div className="col-span-2 text-center mt-1 pt-2 border-t border-slate-700">
+                <p className="text-sm font-bold text-emerald-400">{etatJeu.taux_co2_g_kwh} gCO₂/kWh</p>
+                <p className="text-xs text-slate-500">Intensité carbone</p>
+              </div>
+            )}
           </div>
         </div>
       )}
       {mode === 'chomage' && (
         <div className="mb-3 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/30">
-          <p className="text-xs text-amber-400 font-semibold">Chômage estimé</p>
-          <div className="flex items-center gap-2 mt-1">
+          <p className="text-xs text-amber-400 font-semibold mb-1.5">Chômage estimé</p>
+          <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div className="h-full bg-amber-500 rounded-full"
                 style={{ width: `${(etatJeu?.tension_sociale ?? 45) * 0.7 + 5}%` }} />
@@ -179,7 +208,7 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
         </div>
       )}
 
-      {/* Intentions politiques */}
+      {/* Intentions de vote */}
       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Intentions de vote 2026</p>
       <div className="flex flex-col gap-1">
         {Object.entries(pol.intentions)
@@ -202,10 +231,21 @@ function PanneauDepartement({ feature, onFermer, mode, etatJeu }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────
+// PANNEAU PAYS — échanges dynamiques depuis etatJeu
+// ─────────────────────────────────────────────────────────────
+
 function PanneauPays({ code, onFermer, mode, etatJeu }) {
   const pays = PAYS_DATA[code]
   if (!pays) return null
-  const positif = pays.solde > 0
+
+  // Données échanges dynamiques
+  const mw_solde = getSoldePays(code, etatJeu)
+  const export_  = mw_solde != null ? mw_solde >= 0 : null
+  const cap      = pays.echanges_key ? (CAP_MAX[pays.echanges_key] ?? 2000) : null
+  const utilisation_pct = (mw_solde != null && cap)
+    ? Math.round((Math.abs(mw_solde) / cap) * 100)
+    : null
 
   return (
     <div className="absolute top-4 right-4 w-72 bg-slate-900 border border-slate-600 rounded-xl p-4 shadow-2xl z-20">
@@ -214,12 +254,12 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
           <h3 className="font-bold text-white text-base">{pays.emoji} {pays.nom}</h3>
           <p className="text-xs text-slate-500">Relation France : {pays.relation}/100</p>
         </div>
-        <button onClick={onFermer} className="text-slate-500 hover:text-white">✕</button>
+        <button onClick={onFermer} className="text-slate-500 hover:text-white text-lg leading-none">✕</button>
       </div>
 
-      {/* Relation */}
+      {/* Relations diplomatiques */}
       <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex justify-between mb-1">
           <span className="text-xs text-slate-400">Relations diplomatiques</span>
           <span className={`text-xs font-bold ${pays.relation > 60 ? 'text-emerald-400' : pays.relation > 40 ? 'text-amber-400' : 'text-red-400'}`}>
             {pays.relation}/100
@@ -231,34 +271,63 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
         </div>
       </div>
 
-      {/* Échanges électriques */}
-      <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Échanges électriques</p>
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="bg-red-950/40 border border-red-800/30 rounded-lg p-2 text-center">
-          <p className="text-xs text-red-400">⬇️ Importé</p>
-          <p className="text-sm font-black text-white">{pays.import_twh}</p>
-          <p className="text-xs text-slate-500">TWh/an</p>
-        </div>
-        <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-lg p-2 text-center">
-          <p className="text-xs text-emerald-400">⬆️ Exporté</p>
-          <p className="text-sm font-black text-white">{pays.export_twh}</p>
-          <p className="text-xs text-slate-500">TWh/an</p>
-        </div>
-      </div>
+      {/* Échanges électriques — dynamiques */}
+      {pays.echanges_key ? (
+        <>
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">⚡ Échanges électriques (temps réel)</p>
 
-      <div className={`rounded-lg p-3 text-center border ${
-        positif ? 'bg-emerald-950/40 border-emerald-700/40' : 'bg-red-950/40 border-red-700/40'
-      }`}>
-        <p className="text-xs text-slate-400">Solde France</p>
-        <p className={`text-xl font-black ${positif ? 'text-emerald-400' : 'text-red-400'}`}>
-          {positif ? '+' : ''}{pays.solde} TWh
-        </p>
-        <p className="text-xs text-slate-500 mt-0.5">
-          {positif ? '✅ Exportatrice nette' : '⚠️ Importatrice nette'}
-        </p>
-      </div>
+          {/* Solde courant */}
+          <div className={`rounded-xl border p-3 mb-3 flex items-center justify-between ${
+            export_ === null ? 'bg-slate-800/50 border-slate-700/40' :
+            export_ ? 'bg-green-950/40 border-green-700/40' : 'bg-red-950/40 border-red-700/40'
+          }`}>
+            <div>
+              <p className="text-[10px] text-slate-400">Solde actuel</p>
+              <p className={`text-xl font-bold tabular-nums mt-0.5 ${
+                export_ === null ? 'text-slate-400' : export_ ? 'text-green-300' : 'text-red-300'
+              }`}>{fmtMW(mw_solde)}</p>
+            </div>
+            <div className="text-right">
+              {export_ !== null && (
+                <p className={`text-xs font-semibold ${export_ ? 'text-green-400' : 'text-red-400'}`}>
+                  {export_ ? '▲ Export FR' : '▼ Import FR'}
+                </p>
+              )}
+              {utilisation_pct != null && (
+                <p className="text-[10px] text-slate-500 mt-1">{utilisation_pct}% capacité</p>
+              )}
+            </div>
+          </div>
 
-      {/* Tension du pays */}
+          {/* Barre capacité */}
+          {cap && mw_solde != null && (
+            <div className="mb-3">
+              <div className="flex justify-between mb-1">
+                <span className="text-[10px] text-slate-500">Utilisation interconnexion</span>
+                <span className="text-[10px] text-slate-500">Cap. max : {cap >= 1000 ? `${cap/1000} GW` : `${cap} MW`}</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-500 ${export_ ? 'bg-green-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min(100, utilisation_pct)}%`, opacity: 0.8 }} />
+              </div>
+            </div>
+          )}
+
+          {/* Note dynamique */}
+          <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-2.5">
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              💡 Ces flux varient à chaque tour selon vos décisions, le mix énergétique,
+              les crises géopolitiques et les maintenances en cours.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-2.5">
+          <p className="text-xs text-slate-500">Pas d'interconnexion électrique directe avec la France.</p>
+        </div>
+      )}
+
+      {/* Tension politique interne */}
       <div className="mt-3">
         <div className="flex justify-between mb-1">
           <span className="text-xs text-slate-400">Tension politique interne</span>
@@ -273,23 +342,48 @@ function PanneauPays({ code, onFermer, mode, etatJeu }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// PANNEAU ÉNERGIE LATÉRAL — PanneauEnergie complet
+// ─────────────────────────────────────────────────────────────
+
+function PanneauEnergieLatéral({ etatJeu, onFermer }) {
+  return (
+    <div className="absolute top-4 right-4 w-80 max-h-[calc(100%-2rem)] bg-slate-900 border border-slate-600 rounded-xl p-4 shadow-2xl z-20 flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Détail système électrique</span>
+        <button onClick={onFermer} className="text-slate-500 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <PanneauEnergie etatJeu={etatJeu} />
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // COMPOSANT PRINCIPAL
 // ─────────────────────────────────────────────────────────────
 
 export default function Carte({ etatJeu }) {
   const svgRef = useRef(null)
-  const [mode, setMode]         = useState('politique')
+  const [mode, setMode]           = useState('politique')
   const [geoFrance, setGeoFrance] = useState(null)
   const [geoEurope, setGeoEurope] = useState(null)
-  const [selected, setSelected] = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
+  const [selected, setSelected]   = useState(null)
+  const [panneauEnergie, setPanneauEnergie] = useState(false)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
 
-  // ── Charger les GeoJSON ──────────────────────────────
+  // ── Ouvrir panneau énergie auto quand on passe en mode énergie ──
+  useEffect(() => {
+    if (mode === 'energie') setPanneauEnergie(true)
+    else setPanneauEnergie(false)
+  }, [mode])
+
+  // ── Charger les GeoJSON ─────────────────────────────────────
   useEffect(() => {
     setLoading(true)
-    const urlFrance = 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson'
-    const urlEurope = 'https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson'
+    const urlFrance  = 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson'
+    const urlEurope  = 'https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson'
 
     Promise.all([
       fetch(urlFrance).then(r => r.json()),
@@ -299,12 +393,12 @@ export default function Carte({ etatJeu }) {
       setGeoEurope(europe)
       setLoading(false)
     }).catch(() => {
-      setError("Impossible de charger la carte.")
+      setError('Impossible de charger la carte.')
       setLoading(false)
     })
   }, [])
 
-  // ── Dessiner ─────────────────────────────────────────
+  // ── Dessiner ─────────────────────────────────────────────────
   useEffect(() => {
     if (!geoFrance || !svgRef.current) return
 
@@ -315,20 +409,19 @@ export default function Carte({ etatJeu }) {
     svg.selectAll('*').remove()
     svg.attr('viewBox', `0 0 ${W} ${H}`)
 
-    // ── Fond océan ──
+    // Fond océan
     svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0c1520')
 
-    // ── Projection principale ──
+    // Projection
     const proj = d3.geoConicConformal()
       .center([2.454071, 46.279229])
       .scale(2100)
       .translate([W / 2 - 30, H / 2 - 100])
 
     const path = d3.geoPath().projection(proj)
-
     const codesEuropePays = Object.keys(PAYS_DATA)
 
-    // ── Pays européens (vraies formes GeoJSON si disponibles) ──
+    // ── Pays européens ──
     if (geoEurope?.features) {
       const paysFiltres = geoEurope.features.filter(f => {
         const iso = f.properties?.ISO3 ?? f.properties?.iso_a3 ?? f.properties?.ADM0_A3 ?? ''
@@ -349,22 +442,21 @@ export default function Carte({ etatJeu }) {
         .attr('stroke', '#1e3a5f')
         .attr('stroke-width', 0.8)
         .style('cursor', 'pointer')
-        .on('mouseover', function(event, d) {
+        .on('mouseover', function() {
           d3.select(this).attr('fill-opacity', 0.95).attr('stroke', '#60a5fa').attr('stroke-width', 1.5)
         })
-        .on('mouseout', function(event, d) {
+        .on('mouseout', function() {
           d3.select(this).attr('fill-opacity', 0.7).attr('stroke', '#1e3a5f').attr('stroke-width', 0.8)
         })
         .on('click', function(event, d) {
           const iso = d.properties?.ISO3 ?? d.properties?.iso_a3 ?? d.properties?.ADM0_A3 ?? ''
           if (codesEuropePays.includes(iso)) {
-            setSelected(prev =>
-              prev?.type === 'pays' && prev.code === iso ? null : { type: 'pays', code: iso }
-            )
+            setPanneauEnergie(false)
+            setSelected(prev => prev?.type === 'pays' && prev.code === iso ? null : { type: 'pays', code: iso })
           }
         })
 
-      // Labels pays
+      // Labels pays avec solde dynamique en mode énergie
       paysFiltres.forEach(f => {
         const iso = f.properties?.ISO3 ?? f.properties?.iso_a3 ?? f.properties?.ADM0_A3 ?? ''
         const p = PAYS_DATA[iso]
@@ -373,9 +465,10 @@ export default function Carte({ etatJeu }) {
         if (!centroid || isNaN(centroid[0])) return
 
         const g = svg.append('g').style('cursor', 'pointer')
-          .on('click', () => setSelected(prev =>
-            prev?.type === 'pays' && prev.code === iso ? null : { type: 'pays', code: iso }
-          ))
+          .on('click', () => {
+            setPanneauEnergie(false)
+            setSelected(prev => prev?.type === 'pays' && prev.code === iso ? null : { type: 'pays', code: iso })
+          })
 
         g.append('text')
           .attr('x', centroid[0]).attr('y', centroid[1])
@@ -384,18 +477,25 @@ export default function Carte({ etatJeu }) {
           .attr('pointer-events', 'none')
           .text(p.emoji)
 
-        if (mode === 'energie' && p.solde !== 0) {
-          g.append('text')
-            .attr('x', centroid[0]).attr('y', centroid[1] + 12)
-            .attr('text-anchor', 'middle')
-            .attr('fill', p.solde > 0 ? '#4ade80' : '#f87171')
-            .attr('font-size', 8).attr('font-weight', 'bold')
-            .attr('pointer-events', 'none')
-            .text(`${p.solde > 0 ? '▲' : '▼'}${Math.abs(p.solde)}`)
+        if (mode === 'energie' && p.echanges_key) {
+          const mw = etatJeu?.echanges_mw?.[p.echanges_key] ?? null
+          if (mw != null) {
+            const label = Math.abs(mw) >= 1000
+              ? `${mw >= 0 ? '▲' : '▼'}${(Math.abs(mw)/1000).toFixed(1)}GW`
+              : `${mw >= 0 ? '▲' : '▼'}${Math.abs(Math.round(mw))}MW`
+            g.append('text')
+              .attr('x', centroid[0]).attr('y', centroid[1] + 12)
+              .attr('text-anchor', 'middle')
+              .attr('fill', mw >= 0 ? '#4ade80' : '#f87171')
+              .attr('font-size', 7.5).attr('font-weight', 'bold')
+              .attr('pointer-events', 'none')
+              .text(label)
+          }
         }
       })
+
     } else {
-      // Fallback: rectangles si GeoJSON Europe indisponible
+      // Fallback rectangles
       const fallback = [
         { code: 'GBR', x: 185, y: 25,  w: 130, h: 55 },
         { code: 'BEL', x: 390, y: 25,  w: 90,  h: 45 },
@@ -414,18 +514,24 @@ export default function Carte({ etatJeu }) {
         g.append('rect').attr('x', pays.x).attr('y', pays.y).attr('width', pays.w).attr('height', pays.h)
           .attr('rx', 4).attr('fill', getCouleurPays(pays.code, mode, etatJeu))
           .attr('stroke', '#334155').attr('stroke-width', 1)
-        g.append('text').attr('x', pays.x + pays.w / 2).attr('y', pays.y + pays.h / 2)
+        g.append('text').attr('x', pays.x + pays.w/2).attr('y', pays.y + pays.h/2)
           .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-          .attr('fill', '#94a3b8').attr('font-size', 10).text(`${info.emoji}`)
-        if (mode === 'energie') {
-          g.append('text').attr('x', pays.x + pays.w / 2).attr('y', pays.y + pays.h / 2 + 13)
-            .attr('text-anchor', 'middle').attr('fill', info.solde > 0 ? '#4ade80' : '#f87171')
-            .attr('font-size', 8).attr('font-weight', 'bold')
-            .text(`${info.solde > 0 ? '+' : ''}${info.solde}`)
+          .attr('fill', '#94a3b8').attr('font-size', 10).text(info.emoji)
+
+        if (mode === 'energie' && info.echanges_key) {
+          const mw = etatJeu?.echanges_mw?.[info.echanges_key] ?? null
+          if (mw != null) {
+            g.append('text').attr('x', pays.x + pays.w/2).attr('y', pays.y + pays.h/2 + 13)
+              .attr('text-anchor', 'middle').attr('fill', mw >= 0 ? '#4ade80' : '#f87171')
+              .attr('font-size', 8).attr('font-weight', 'bold')
+              .text(`${mw >= 0 ? '+' : ''}${Math.round(mw/1000*10)/10}GW`)
+          }
         }
-        g.on('click', () => setSelected(prev =>
-          prev?.type === 'pays' && prev.code === pays.code ? null : { type: 'pays', code: pays.code }
-        ))
+
+        g.on('click', () => {
+          setPanneauEnergie(false)
+          setSelected(prev => prev?.type === 'pays' && prev.code === pays.code ? null : { type: 'pays', code: pays.code })
+        })
         .on('mouseover', () => g.select('rect').attr('stroke', '#60a5fa'))
         .on('mouseout', () => g.select('rect').attr('stroke', '#334155'))
       })
@@ -448,18 +554,18 @@ export default function Carte({ etatJeu }) {
       .attr('stroke', '#0c1520')
       .attr('stroke-width', 0.5)
       .style('cursor', 'pointer')
-      .on('mouseover', function(event, d) {
+      .on('mouseover', function() {
         d3.select(this).attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1.5)
       })
       .on('mouseout', function(event, d) {
-        const isSel = selected?.type === 'dep' &&
-          selected?.feature?.properties?.code === d.properties.code
+        const isSel = selected?.type === 'dep' && selected?.feature?.properties?.code === d.properties.code
         d3.select(this)
           .attr('fill-opacity', 0.88)
           .attr('stroke', isSel ? '#fff' : '#0c1520')
           .attr('stroke-width', isSel ? 2 : 0.5)
       })
       .on('click', function(event, d) {
+        setPanneauEnergie(false)
         setSelected(prev =>
           prev?.type === 'dep' && prev?.feature?.properties?.code === d.properties.code
             ? null : { type: 'dep', feature: d }
@@ -479,15 +585,13 @@ export default function Carte({ etatJeu }) {
       .attr('font-size', 5.5).attr('pointer-events', 'none')
       .text(d => d.properties.code)
 
-    // ── Séparateur DROM-TOM ──
+    // ── Séparateur DROM-COM ──
     svg.append('line')
-      .attr('x1', 12).attr('y1', 630)
-      .attr('x2', W - 12).attr('y2', 630)
+      .attr('x1', 12).attr('y1', 630).attr('x2', W - 12).attr('y2', 630)
       .attr('stroke', '#1e3a5f').attr('stroke-width', 1).attr('stroke-dasharray', '5,4')
     svg.append('text')
       .attr('x', 16).attr('y', 645)
-      .attr('fill', '#334155').attr('font-size', 9)
-      .text('▶ DROM-COM')
+      .attr('fill', '#334155').attr('font-size', 9).text('▶ DROM-COM')
 
     // ── DROM-COM encarts ──
     const dromFeatures = geoFrance.features.filter(f => DROMCOM_CODES.includes(f.properties.code))
@@ -496,20 +600,15 @@ export default function Carte({ etatJeu }) {
       const info = DROMCOM_INFO[code]
       if (!info) return
 
-      // Fond encart avec bordure
       svg.append('rect')
         .attr('x', info.encartX - 2).attr('y', info.encartY - 2)
         .attr('width', info.encartW + 4).attr('height', info.encartH + 4)
-        .attr('rx', 6)
-        .attr('fill', '#0d1f35').attr('stroke', '#1e3a5f').attr('stroke-width', 1)
+        .attr('rx', 6).attr('fill', '#0d1f35').attr('stroke', '#1e3a5f').attr('stroke-width', 1)
 
       const projDrom = d3.geoMercator()
         .center(info.center)
         .scale(info.scale * 500)
-        .translate([
-          info.encartX + info.encartW / 2,
-          info.encartY + info.encartH / 2 - 6,
-        ])
+        .translate([info.encartX + info.encartW / 2, info.encartY + info.encartH / 2 - 6])
 
       const pathDrom = d3.geoPath().projection(projDrom)
 
@@ -520,51 +619,69 @@ export default function Carte({ etatJeu }) {
         .attr('fill-opacity', 0.88)
         .attr('stroke', '#0c1520').attr('stroke-width', 0.5)
         .style('cursor', 'pointer')
-        .on('mouseover', function() {
-          d3.select(this).attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1)
-        })
-        .on('mouseout', function() {
-          d3.select(this).attr('fill-opacity', 0.88).attr('stroke', '#0c1520').attr('stroke-width', 0.5)
-        })
-        .on('click', () => setSelected({ type: 'dep', feature }))
+        .on('mouseover', function() { d3.select(this).attr('fill-opacity', 1).attr('stroke', '#fff') })
+        .on('mouseout', function() { d3.select(this).attr('fill-opacity', 0.88).attr('stroke', '#0c1520') })
+        .on('click', () => { setPanneauEnergie(false); setSelected({ type: 'dep', feature }) })
 
-      // Nom DROM
       svg.append('text')
-        .attr('x', info.encartX + info.encartW / 2)
-        .attr('y', info.encartY + info.encartH - 3)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#64748b').attr('font-size', 7.5)
+        .attr('x', info.encartX + info.encartW / 2).attr('y', info.encartY + info.encartH - 3)
+        .attr('text-anchor', 'middle').attr('fill', '#64748b').attr('font-size', 7.5)
         .text(info.nom)
     })
 
-    // ── Bandeau solde énergie total ──
+    // ── Bandeau solde énergie total (dynamique) ──
     if (mode === 'energie') {
-      const soldeTotal = Object.values(PAYS_DATA).reduce((s, p) => s + p.solde, 0)
-      const positif = soldeTotal > 0
+      const soldeTotal_mw = etatJeu?.echanges_mw?.solde_total ?? null
+      const positif = soldeTotal_mw != null ? soldeTotal_mw >= 0 : true
+
+      const label = soldeTotal_mw != null
+        ? `${positif ? '+' : ''}${Math.abs(soldeTotal_mw) >= 1000
+            ? `${(soldeTotal_mw/1000).toFixed(1)} GW`
+            : `${Math.round(soldeTotal_mw)} MW`}`
+        : '— MW'
+
       svg.append('rect')
-        .attr('x', W / 2 - 95).attr('y', H - 80)
-        .attr('width', 190).attr('height', 52)
+        .attr('x', W/2 - 105).attr('y', H - 82)
+        .attr('width', 210).attr('height', 56)
         .attr('rx', 10)
         .attr('fill', positif ? '#14532d' : '#7f1d1d')
-        .attr('stroke', positif ? '#16a34a' : '#dc2626')
-        .attr('stroke-width', 1)
+        .attr('stroke', positif ? '#16a34a' : '#dc2626').attr('stroke-width', 1)
+
       svg.append('text')
-        .attr('x', W / 2).attr('y', H - 57)
+        .attr('x', W/2).attr('y', H - 59)
         .attr('text-anchor', 'middle').attr('fill', '#94a3b8').attr('font-size', 9)
         .text('Solde électrique total France')
+
       svg.append('text')
-        .attr('x', W / 2).attr('y', H - 38)
+        .attr('x', W/2).attr('y', H - 38)
         .attr('text-anchor', 'middle')
         .attr('fill', positif ? '#4ade80' : '#f87171')
-        .attr('font-size', 17).attr('font-weight', 'bold')
-        .text(`${positif ? '+' : ''}${soldeTotal.toFixed(1)} TWh`)
+        .attr('font-size', 18).attr('font-weight', 'bold')
+        .text(label)
+
+      // Bouton "Détail →" sous le bandeau
+      const gBtn = svg.append('g').style('cursor', 'pointer')
+        .on('click', () => { setPanneauEnergie(true); setSelected(null) })
+
+      gBtn.append('rect')
+        .attr('x', W/2 - 55).attr('y', H - 26)
+        .attr('width', 110).attr('height', 18)
+        .attr('rx', 9).attr('fill', '#1e40af').attr('fill-opacity', 0.8)
+
+      gBtn.append('text')
+        .attr('x', W/2).attr('y', H - 14)
+        .attr('text-anchor', 'middle').attr('fill', '#bfdbfe')
+        .attr('font-size', 8).attr('font-weight', 'bold')
+        .text('⚡ Détail mix →')
     }
 
   }, [geoFrance, geoEurope, mode, etatJeu, selected])
 
-  // ─────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
   // RENDU
-  // ─────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+
+  const panneauVisible = panneauEnergie || selected?.type === 'dep' || selected?.type === 'pays'
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-4">
@@ -589,6 +706,7 @@ export default function Carte({ etatJeu }) {
       {/* SVG carte */}
       <div className="relative rounded-xl border border-slate-700/60 overflow-hidden shadow-2xl"
         style={{ background: '#0c1520', minHeight: 420 }}>
+
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -602,9 +720,10 @@ export default function Carte({ etatJeu }) {
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
+
         <svg ref={svgRef} className="w-full" />
 
-        {/* Panneaux détail */}
+        {/* Panneau département */}
         {selected?.type === 'dep' && (
           <PanneauDepartement
             feature={selected.feature}
@@ -613,6 +732,8 @@ export default function Carte({ etatJeu }) {
             etatJeu={etatJeu}
           />
         )}
+
+        {/* Panneau pays */}
         {selected?.type === 'pays' && (
           <PanneauPays
             code={selected.code}
@@ -621,11 +742,21 @@ export default function Carte({ etatJeu }) {
             etatJeu={etatJeu}
           />
         )}
+
+        {/* Panneau énergie latéral */}
+        {panneauEnergie && !selected && (
+          <PanneauEnergieLatéral
+            etatJeu={etatJeu}
+            onFermer={() => setPanneauEnergie(false)}
+          />
+        )}
       </div>
 
       {/* Légende */}
       <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
-        <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">Légende — mode {MODES.find(m => m.id === mode)?.label}</p>
+        <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">
+          Légende — mode {MODES.find(m => m.id === mode)?.label}
+        </p>
         {mode === 'politique' && (
           <div className="flex flex-wrap gap-3">
             {Object.entries(COULEURS_PARTIS)
@@ -684,15 +815,15 @@ export default function Carte({ etatJeu }) {
       {/* Stats synthèse */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: '❤️ Popularité',    val: `${Math.round(etatJeu?.popularite_joueur ?? 42)}%`,
+          { label: '❤️ Popularité',  val: `${Math.round(etatJeu?.popularite_joueur ?? 42)}%`,
             color: (etatJeu?.popularite_joueur ?? 42) < 35 ? 'text-red-400' : 'text-emerald-400' },
-          { label: '🔥 Tension',       val: `${Math.round(etatJeu?.tension_sociale ?? 45)}/100`,
+          { label: '🔥 Tension',     val: `${Math.round(etatJeu?.tension_sociale ?? 45)}/100`,
             color: (etatJeu?.tension_sociale ?? 45) > 65 ? 'text-red-400' : 'text-amber-400' },
-          { label: '⚡ Électricité',   val: `${Math.round(etatJeu?.prix_electricite ?? 72)} €/MWh`,
-            color: (etatJeu?.prix_electricite ?? 72) > 100 ? 'text-red-400' : 'text-blue-400' },
-          { label: '☢️ Nucléaire',     val: `${etatJeu?.part_nucleaire_mix_pct ?? 68}%`,
+          { label: '⚡ Électricité', val: `${Math.round(etatJeu?.prix_electricite ?? 95)} €/MWh`,
+            color: (etatJeu?.prix_electricite ?? 95) > 100 ? 'text-red-400' : 'text-blue-400' },
+          { label: '☢️ Nucléaire',   val: `${etatJeu?.part_nucleaire_mix_pct ?? 68}%`,
             color: 'text-blue-300' },
-          { label: '📅 Date',          val: etatJeu?.date ?? '1er Mars 2026',
+          { label: '📅 Date',        val: etatJeu?.date ?? '1er Mars 2026',
             color: 'text-slate-400' },
         ].map(({ label, val, color }) => (
           <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center">
