@@ -2,21 +2,19 @@ import { useState } from 'react'
 import GameEngine from './components/GameEngine.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Carte from './components/Carte.jsx'
-import Hemicycle from './components/Hemicycle.jsx'
-import Legislatif from './components/Legislatif.jsx'
+import Parlement from './components/Parlement.jsx'
 import FabriqueLoi from './components/FabriqueLoi.jsx'
 import EcranSelection from './components/EcranSelection.jsx'
 
 const ONGLETS = [
-  { id: 'dashboard',  label: '🏛️ Élysée' },
-  { id: 'carte',      label: '🗺️ Carte' },
-  { id: 'hemicycle',  label: '⚖️ Hémicycle' },
-  { id: 'legislatif', label: '📜 Lois' },
-  { id: 'fabrique',   label: '⚗️ Fabrique de loi' },
+  { id: 'dashboard', label: '🏛️ Élysée' },
+  { id: 'carte',     label: '🗺️ Carte' },
+  { id: 'parlement', label: '⚖️ Parlement' },
+  { id: 'fabrique',  label: '⚗️ Fabrique de loi' },
 ]
 
 export default function App() {
-  const [onglet, setOnglet]         = useState('dashboard')
+  const [onglet, setOnglet]           = useState('dashboard')
   const [partiChoisi, setPartiChoisi] = useState(null)
 
   if (!partiChoisi) {
@@ -57,11 +55,10 @@ export default function App() {
             </div>
           </header>
 
-          {onglet === 'dashboard'  && <Dashboard  {...gameProps} />}
-          {onglet === 'carte'      && <Carte       {...gameProps} />}
-          {onglet === 'hemicycle'  && <Hemicycle   {...gameProps} />}
-          {onglet === 'legislatif' && <Legislatif  {...gameProps} />}
-          {onglet === 'fabrique'   && <FabriqueLoi {...gameProps} />}
+          {onglet === 'dashboard' && <Dashboard  {...gameProps} />}
+          {onglet === 'carte'     && <Carte      {...gameProps} />}
+          {onglet === 'parlement' && <Parlement  {...gameProps} />}
+          {onglet === 'fabrique'  && <FabriqueLoi {...gameProps} />}
         </div>
       )}
     </GameEngine>
