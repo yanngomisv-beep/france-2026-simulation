@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
 import * as Dialog from '@radix-ui/react-dialog'
 import anime from 'animejs'
-import { getToutesLois, getLoisDisponibles } from '../engines/moteur-legislatif.js'
+import { getToutesLois, getLoisDisponibles, getLoi } from '../engines/moteur-legislatif.js'
 import { CATALOGUE_LOIS } from '../data/lois/catalogue-lois.js'
 
 // ═══════════════════════════════════════════════════════════
@@ -22,15 +22,18 @@ const PARTIS_AN = [
   { id: 'DIVERS',       label: 'Divers',       sieges: 6,   couleur: '#888888', bloc: 'Divers',           vote_tendance: 'variable'   },
 ]
 
+// ── Sénat post-municipales 2026 ──────────────────────────────
+// RN +14 (vague locale), Renaissance -18, LR -7, PS +6, Divers +7
 const PARTIS_SENAT = [
-  { id: 'LR_S',    label: 'LR',       sieges: 145, couleur: '#0066cc', bloc: 'Droite',          vote_tendance: 'variable'   },
-  { id: 'UC_S',    label: 'UC',       sieges: 56,  couleur: '#3399ff', bloc: 'Centre droit',    vote_tendance: 'variable'   },
-  { id: 'EPR_S',   label: 'Majorité', sieges: 72,  couleur: '#ffcc00', bloc: 'Centre',          vote_tendance: 'soutien'    },
-  { id: 'RN_S',    label: 'RN',       sieges: 22,  couleur: '#1a1aff', bloc: 'Extrême droite',  vote_tendance: 'opposition' },
-  { id: 'PS_S',    label: 'PS',       sieges: 64,  couleur: '#ff8c00', bloc: 'Gauche',          vote_tendance: 'opposition' },
+  { id: 'LR_S',    label: 'LR',       sieges: 138, couleur: '#0066cc', bloc: 'Droite',          vote_tendance: 'variable'   },
+  { id: 'UC_S',    label: 'UC',       sieges: 54,  couleur: '#3399ff', bloc: 'Centre droit',    vote_tendance: 'variable'   },
+  { id: 'EPR_S',   label: 'Majorité', sieges: 54,  couleur: '#ffcc00', bloc: 'Centre',          vote_tendance: 'soutien'    },
+  { id: 'RN_S',    label: 'RN',       sieges: 36,  couleur: '#1a1aff', bloc: 'Extrême droite',  vote_tendance: 'opposition' },
+  { id: 'PS_S',    label: 'PS',       sieges: 70,  couleur: '#ff8c00', bloc: 'Gauche',          vote_tendance: 'opposition' },
   { id: 'CRCE_S',  label: 'CRCE',     sieges: 22,  couleur: '#cc0000', bloc: 'Gauche radicale', vote_tendance: 'opposition' },
-  { id: 'DIVERS_S',label: 'Divers',   sieges: 7,   couleur: '#888888', bloc: 'Divers',          vote_tendance: 'variable'   },
+  { id: 'DIVERS_S',label: 'Divers',   sieges: 14,  couleur: '#888888', bloc: 'Divers',          vote_tendance: 'variable'   },
 ]
+// Total = 388 · Majorité = 195
 
 const TOTAL_AN = 577, MAJORITE_AN = 289
 const TOTAL_SENAT = 388, MAJORITE_SENAT = 195
@@ -519,7 +522,7 @@ function CarteLoi({ loi, onVoter, dejaVotee, etatJeu }) {
 // COMPOSANT PRINCIPAL — PARLEMENT
 // ═══════════════════════════════════════════════════════════
 
-export default function Parlement({ etatJeu, voterLoi }) {
+export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
   const [vue, setVue]                     = useState('AN')
   const [siegeSelectionne, setSiegeSel]   = useState(null)
   const [modalVote, setModalVote]         = useState(null)
@@ -567,7 +570,13 @@ export default function Parlement({ etatJeu, voterLoi }) {
 
   function handleAdopte() {
     if (modalVote) {
-      voterLoi?.(modalVote.id, 0)
+      // appliquerLoiAdoptee applique les impacts directement (sans re-tirage)
+      // voterLoi avec bonus max comme fallback si GameEngine pas encore mis à jour
+      if (appliquerLoiAdoptee) {
+        appliquerLoiAdoptee(modalVote.id)
+      } else {
+        voterLoi?.(modalVote.id, 577) // bonus = total AN → adoption garantie
+      }
       setHistorique(h => [{ loi: modalVote, resultat: 'adoptee', date: etatJeu?.date ?? 'Mars 2026' }, ...h])
     }
     setModalVote(null)
