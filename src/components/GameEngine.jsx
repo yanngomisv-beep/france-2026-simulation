@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react'
 import { soumettreLoiAuVote, getLoisDisponibles, getLoi } from '../engines/moteur-legislatif.js'
-import { tourIA }           from '../engines/moteur-ia-partis.js'
-import { tourMoteurVNU }    from '../engines/moteur-vnu.js'
-import { tourGeopolitique } from '../engines/moteur-geopolitique.js'
-import { tourScandales }    from '../engines/moteur-scandales.js'
+import { tourIA }              from '../engines/moteur-ia-partis.js'
+import { tourMoteurVNU }       from '../engines/moteur-vnu.js'
+import { tourMoteurScandales } from '../engines/moteur-scandales.js'
 import {
   getCurseursInitiaux,
   genererReformesTour,
@@ -25,17 +24,32 @@ const HEMICYCLE_INITIAL = {
 }
 
 const MOIS = [
-  'Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre',
+  'Janvier','Février','Mars','Avril','Mai','Juin',
+  'Juillet','Août','Septembre','Octobre','Novembre','Décembre',
 ]
 
+const ETAT_SCANDALES_INITIAL = {
+  dissimulation:               20,
+  pression_mediatique:         15,
+  stabilite_institutionnelle:  80,
+  scandales_actifs:            [],
+  actions_secretes_actives:    [],
+  fuites_passees:              [],
+  nouveau_president_assemblee: false,
+  president_assemblee_parti:   'EPR',
+  commissions_enquete_actives:  0,
+  mises_en_examen:              0,
+  procedure_art68_active:      false,
+}
+
 // ═══════════════════════════════════════════════════════════
-// ETAT INITIAL
+// ÉTAT INITIAL
 // ═══════════════════════════════════════════════════════════
 
 function getEtatBase(partiId) {
   const etatParti = getEtatInitialParti(partiId)
   return {
+    // Politique
     popularite_joueur:             42,
     tension_sociale:               45,
     stabilite:                     58,
@@ -51,24 +65,22 @@ function getEtatBase(partiId) {
     parti_joueur:              partiId,
     hemicycle:         { ...HEMICYCLE_INITIAL },
     lois_votees:                   [],
-    scandales_actifs:              [],
-    dissimulation:                  0,
-    pression_mediatique:            0,
+    // Énergie
     prix_baril:                    80,
     prix_baril_dollars:            80,
-    prix_electricite:              72,
-    prix_electricite_marche_mwh:   72,
     prix_gaz:                      38,
     prix_gaz_mwh:                  38,
+    prix_electricite:              72,
+    prix_electricite_marche_mwh:   72,
     edf_rentable:                true,
     edf_dette_milliards:           54,
     avancement_epr2_pct:           12,
     recettes_vnu_milliards:         0,
+    mer_rouge_fermee:           false,
+    tensions_iran:              false,
     dependance_gaz_etranger_pct:   72,
     part_nucleaire_mix_pct:        68,
     part_renouvelable_mix_pct:     24,
-    mer_rouge_fermee:           false,
-    tensions_iran:              false,
     affectation_vnu: {
       bouclier_menages_pct:      0,
       subvention_industrie_pct:  0,
@@ -76,6 +88,9 @@ function getEtatBase(partiId) {
       financement_epr2_pct:      0,
       reserve_pct:             100,
     },
+    // Scandales
+    ...ETAT_SCANDALES_INITIAL,
+    // Override avec données du parti choisi
     ...(etatParti ?? {}),
   }
 }
@@ -108,36 +123,76 @@ export default function GameEngine({ partiJoueur, children }) {
         if (r?.evenements?.length) evs.push(...r.evenements)
       } catch (e) { console.warn('[tourIA]', e.message) }
 
-      // Moteur VNU energetique
+      // Moteur VNU énergétique
       try {
-        const r = tourMoteurVNU(etat, etat, etat.affectation_vnu)
-        if (r?.resultat_affectation?.nouvelEtat) {
-          etat = { ...etat, ...r.resultat_affectation.nouvelEtat }
+        const etatEnergie = {
+          prix_baril_dollars:          etat.prix_baril_dollars          ?? 80,
+          prix_gaz_mwh:                etat.prix_gaz_mwh                ?? 38,
+          prix_electricite_marche_mwh: etat.prix_electricite_marche_mwh ?? 72,
+          mer_rouge_fermee:            etat.mer_rouge_fermee             ?? false,
+          tensions_iran:               etat.tensions_iran                ?? false,
+          recettes_vnu_milliards:      etat.recettes_vnu_milliards       ?? 0,
+          avancement_epr2_pct:         etat.avancement_epr2_pct          ?? 12,
+          edf_rentable:                etat.edf_rentable                 ?? true,
         }
+        const r = tourMoteurVNU(etatEnergie, etat, etat.affectation_vnu)
+        if (r?.nouvelEtatEnergie)                etat = { ...etat, ...r.nouvelEtatEnergie }
+        if (r?.resultat_affectation?.nouvelEtat) etat = { ...etat, ...r.resultat_affectation.nouvelEtat }
         if (r?.prix_electricite != null) {
           etat.prix_electricite            = r.prix_electricite
           etat.prix_electricite_marche_mwh = r.prix_electricite
         }
         if (r?.evenements_declenches?.length) {
-          evs.push(...r.evenements_declenches.map(e => ({ titre: e.titre, emoji: e.emoji ?? 'e' })))
+          evs.push(...r.evenements_declenches.map(e => ({
+            titre: e.titre,
+            emoji: e.emoji ?? '⚡',
+          })))
         }
       } catch (e) { console.warn('[tourMoteurVNU]', e.message) }
 
-      // Moteur geopolitique
+      // Moteur géopolitique — import dynamique ES compatible (pas de require)
       try {
-        const r = tourGeopolitique(etat)
-        if (r?.etat) etat = { ...etat, ...r.etat }
-        if (r?.evenements?.length) evs.push(...r.evenements)
+        // Si moteur-geopolitique.js exporte tourGeopolitique ou tourMoteurGeopolitique
+        // l'import est fait dynamiquement pour éviter les erreurs si le nom change
+        void import('../engines/moteur-geopolitique.js').then(mod => {
+          const fn = mod.tourGeopolitique ?? mod.tourMoteurGeopolitique ?? mod.default
+          if (typeof fn === 'function') {
+            setEtatJeu(current => {
+              try {
+                const r = fn(current)
+                if (!r?.etat && !r?.evenements) return current
+                return { ...current, ...(r.etat ?? {}) }
+              } catch { return current }
+            })
+          }
+        }).catch(() => {})
       } catch (e) { console.warn('[tourGeopolitique]', e.message) }
 
       // Moteur scandales
       try {
-        const r = tourScandales(etat)
-        if (r?.etat) etat = { ...etat, ...r.etat }
+        const etatScandales = {
+          dissimulation:               etat.dissimulation               ?? 20,
+          pression_mediatique:         etat.pression_mediatique         ?? 15,
+          consentement_impot:          etat.consentement_impot          ?? 55,
+          stabilite_institutionnelle:  etat.stabilite_institutionnelle  ?? 80,
+          scandales_actifs:            etat.scandales_actifs            ?? [],
+          actions_secretes_actives:    etat.actions_secretes_actives    ?? [],
+          nouveau_president_assemblee: etat.nouveau_president_assemblee ?? false,
+          commissions_enquete_actives: etat.commissions_enquete_actives ?? 0,
+        }
+        const r = tourMoteurScandales(etatScandales, etat)
+        if (r?.nouvelEtat)    etat = { ...etat, ...r.nouvelEtat }
+        if (r?.nouvelEtatJeu) etat = { ...etat, ...r.nouvelEtatJeu }
+        if (r?.nouveaux_scandales?.length) {
+          evs.push(...r.nouveaux_scandales.map(s => ({
+            titre: s.titre ?? s.nom,
+            emoji: s.emoji ?? '🚨',
+          })))
+        }
         if (r?.evenements?.length) evs.push(...r.evenements)
-      } catch (e) { console.warn('[tourScandales]', e.message) }
+      } catch (e) { console.warn('[tourMoteurScandales]', e.message) }
 
-      // Derive naturelle
+      // Dérive naturelle
       etat.popularite_joueur = Math.max(0, Math.min(100, (etat.popularite_joueur ?? 42) - 0.5))
       etat.tension_sociale   = Math.max(0, Math.min(100, (etat.tension_sociale   ?? 45) + 0.3))
       etat.stabilite         = Math.max(0, Math.min(100,
@@ -156,11 +211,11 @@ export default function GameEngine({ partiJoueur, children }) {
 
     setEvenements(evs)
 
-    // Micro-reformes automatiques selon position des curseurs
+    // Micro-réformes
     const reformes = genererReformesTour(curseurs)
     setReformesTour(reformes)
 
-    // Crise potentielle selon tension
+    // Crise potentielle
     setEtatJeu(prev => {
       const crise = calculerCrisePotentielle(curseurs, prev.tension_sociale ?? 45, crisesResolues)
       if (crise) setCrisesActives(c => [...c.filter(x => x.id !== crise.id), crise])
@@ -170,51 +225,33 @@ export default function GameEngine({ partiJoueur, children }) {
     setLoading(false)
   }, [curseurs, crisesResolues])
 
-  // ── Voter une loi via le moteur (catalogue) ─────────────
+  // ── Voter une loi ───────────────────────────────────────
   const voterLoi = useCallback((loiId, bonusVote = 0) => {
     setEtatJeu(prev => {
       try {
         const res = soumettreLoiAuVote(loiId, prev, prev.hemicycle, bonusVote)
         if (!res) return prev
-        return {
-          ...prev,
-          ...(res.etat ?? {}),
-          lois_votees: res.lois_votees ?? prev.lois_votees,
-        }
-      } catch (e) {
-        console.warn('[voterLoi]', e.message)
-        return prev
-      }
+        return { ...prev, ...(res.etat ?? {}), lois_votees: res.lois_votees ?? prev.lois_votees }
+      } catch (e) { console.warn('[voterLoi]', e.message); return prev }
     })
   }, [])
 
-  // ── Appliquer une loi adoptee (impacts directs) ─────────
-  // Usage :
-  //   Parlement.jsx  -> appliquerLoiAdoptee(loiId)
-  //                     cherche la loi dans le catalogue par ID
-  //   FabriqueLoi.jsx -> appliquerLoiAdoptee(loiId, loiGeneree.impacts)
-  //                     applique les impacts passes directement
+  // ── Appliquer une loi adoptée (impacts directs) ─────────
   const appliquerLoiAdoptee = useCallback((loiId, impactsDirects = null) => {
     setEtatJeu(prev => {
       try {
         if (prev.lois_votees?.includes(loiId)) return prev
-
         let impacts = impactsDirects
         if (!impacts) {
           const loi = getLoi(loiId)
           if (!loi) return prev
           impacts = loi.impacts ?? {}
         }
-
         let etat = { ...prev }
-
         Object.entries(impacts).forEach(([cle, valeur]) => {
-          if (typeof valeur === 'number' && cle in etat) {
+          if (typeof valeur === 'number' && cle in etat)
             etat[cle] = Math.round(((etat[cle] ?? 0) + valeur) * 10) / 10
-          }
         })
-
-        // Clamp toutes les variables critiques
         etat.popularite_joueur        = Math.max(0,   Math.min(100, etat.popularite_joueur        ?? 42))
         etat.tension_sociale          = Math.max(0,   Math.min(100, etat.tension_sociale          ?? 45))
         etat.stabilite                = Math.max(0,   Math.min(100, etat.stabilite                ?? 58))
@@ -226,17 +263,13 @@ export default function GameEngine({ partiJoueur, children }) {
         etat.consentement_impot       = Math.max(0,   Math.min(100, etat.consentement_impot       ?? 55))
         etat.prix_electricite         = Math.max(0,               etat.prix_electricite          ?? 72)
         etat.prix_baril               = Math.max(0,               etat.prix_baril                ?? 80)
-
         etat.lois_votees = [...(etat.lois_votees ?? []), loiId]
         return etat
-      } catch (e) {
-        console.warn('[appliquerLoiAdoptee]', e.message)
-        return prev
-      }
+      } catch (e) { console.warn('[appliquerLoiAdoptee]', e.message); return prev }
     })
   }, [])
 
-  // ── Resoudre une crise ──────────────────────────────────
+  // ── Résoudre une crise ──────────────────────────────────
   const resoudreCrise = useCallback((crise) => {
     setEtatJeu(prev => {
       let e = { ...prev }
@@ -249,51 +282,29 @@ export default function GameEngine({ partiJoueur, children }) {
     setCrisesResolues(r => [...r, crise.id])
   }, [])
 
-  // ── Deplacer un curseur ideologique ────────────────────
+  // ── Déplacer un curseur ─────────────────────────────────
   const deplacerCurseurJoueur = useCallback((axe, delta) => {
     setCurseurs(prev => deplacerCurseur(prev, axe, delta))
   }, [])
 
   // ── Barre de statut ─────────────────────────────────────
   const stats = [
-    {
-      label: 'Popularite',
-      val:   `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,
-      color: (etatJeu.popularite_joueur ?? 42) > 40 ? 'text-green-400' : 'text-red-400',
-    },
-    {
-      label: 'Tension',
-      val:   `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
-      color: (etatJeu.tension_sociale ?? 45) > 60 ? 'text-red-400' : 'text-yellow-400',
-    },
-    {
-      label: 'Deficit',
-      val:   `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
-      color: (etatJeu.deficit_milliards ?? 173) > 200 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: 'UE',
-      val:   `${Math.round(etatJeu.relation_ue ?? 20)}/100`,
-      color: (etatJeu.relation_ue ?? 20) < 10 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: 'Baril',
-      val:   `${etatJeu.prix_baril_dollars ?? etatJeu.prix_baril ?? 80}$`,
-      color: (etatJeu.prix_baril_dollars ?? 80) > 100 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: 'Elec',
-      val:   `${Math.round(etatJeu.prix_electricite ?? 72)}€/MWh`,
-      color: (etatJeu.prix_electricite ?? 72) > 110 ? 'text-red-400' : 'text-slate-300',
-    },
-    {
-      label: 'Tour',
-      val:   `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`,
-      color: 'text-slate-300',
-    },
+    { label: '❤️ Popularité', val: `${Math.round(etatJeu.popularite_joueur ?? 42)}%`,
+      color: (etatJeu.popularite_joueur ?? 42) > 40 ? 'text-green-400' : 'text-red-400' },
+    { label: '⚡ Tension',    val: `${Math.round(etatJeu.tension_sociale ?? 45)}/100`,
+      color: (etatJeu.tension_sociale ?? 45) > 60 ? 'text-red-400' : 'text-yellow-400' },
+    { label: '💰 Déficit',    val: `${Math.round(etatJeu.deficit_milliards ?? 173)} Md€`,
+      color: (etatJeu.deficit_milliards ?? 173) > 200 ? 'text-red-400' : 'text-slate-300' },
+    { label: '🇪🇺 UE',        val: `${Math.round(etatJeu.relation_ue ?? 20)}/100`,
+      color: (etatJeu.relation_ue ?? 20) < 10 ? 'text-red-400' : 'text-slate-300' },
+    { label: '🛢️ Baril',      val: `${etatJeu.prix_baril_dollars ?? etatJeu.prix_baril ?? 80}$`,
+      color: (etatJeu.prix_baril_dollars ?? 80) > 100 ? 'text-red-400' : 'text-slate-300' },
+    { label: '⚡ Élec',       val: `${Math.round(etatJeu.prix_electricite ?? 72)}€/MWh`,
+      color: (etatJeu.prix_electricite ?? 72) > 110 ? 'text-red-400' : 'text-slate-300' },
+    { label: '📅',            val: `T${etatJeu.tour ?? 1} — ${etatJeu.date ?? 'Mars 2026'}`,
+      color: 'text-slate-300' },
   ]
 
-  // ── Props exposes a tous les onglets ────────────────────
   const gameProps = {
     etatJeu,
     curseurs,
@@ -318,20 +329,13 @@ export default function GameEngine({ partiJoueur, children }) {
             <span className={`font-bold ${s.color}`}>{s.val}</span>
           </div>
         ))}
-
-        {/* Curseurs ideologiques en mini-barres */}
         <div className="flex items-center gap-3 ml-auto flex-wrap">
           {Object.entries(AXES).map(([axe, info]) => (
             <div key={axe} className="flex items-center gap-1">
               <span className="text-slate-600 text-xs">{info.label}</span>
               <div className="w-14 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width:           `${curseurs[axe] ?? 50}%`,
-                    backgroundColor: getCouleurCurseur(curseurs[axe] ?? 50),
-                  }}
-                />
+                <div className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${curseurs[axe] ?? 50}%`, backgroundColor: getCouleurCurseur(curseurs[axe] ?? 50) }} />
               </div>
             </div>
           ))}
@@ -343,7 +347,7 @@ export default function GameEngine({ partiJoueur, children }) {
         {children(gameProps)}
       </div>
 
-      {/* Barre du bas : evenements + bouton tour */}
+      {/* Barre du bas */}
       <div className="sticky bottom-0 bg-slate-900 border-t border-slate-800 px-4 py-3 flex items-center justify-between gap-4">
         <div className="flex gap-2 flex-wrap flex-1 overflow-hidden">
           {evenements.slice(0, 3).map((ev, i) => (
@@ -352,25 +356,16 @@ export default function GameEngine({ partiJoueur, children }) {
             </span>
           ))}
         </div>
-        <button
-          onClick={passerTour}
-          disabled={loading}
+        <button onClick={passerTour} disabled={loading}
           className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-colors flex-shrink-0 ${
-            loading
-              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg'
-          }`}
-        >
-          {loading ? 'En cours...' : 'Tour suivant'}
+            loading ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg'
+          }`}>
+          {loading ? '⏳ En cours...' : '⏭️ Tour suivant'}
         </button>
       </div>
 
-      {/* Notifications crises + micro-reformes */}
-      <NotifReformes
-        reformes={reformesTour}
-        crises={crisesActives}
-        onResoudreCrise={resoudreCrise}
-      />
+      {/* Notifications */}
+      <NotifReformes reformes={reformesTour} crises={crisesActives} onResoudreCrise={resoudreCrise} />
     </div>
   )
 }
