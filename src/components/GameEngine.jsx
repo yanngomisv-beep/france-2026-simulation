@@ -192,11 +192,50 @@ export default function GameEngine({ partiJoueur, children }) {
         if (r?.evenements?.length) evs.push(...r.evenements)
       } catch (e) { console.warn('[tourMoteurScandales]', e.message) }
 
-      // Dérive naturelle
-      etat.popularite_joueur = Math.max(0, Math.min(100, (etat.popularite_joueur ?? 42) - 0.5))
-      etat.tension_sociale   = Math.max(0, Math.min(100, (etat.tension_sociale   ?? 45) + 0.3))
-      etat.stabilite         = Math.max(0, Math.min(100,
-        (etat.popularite_joueur ?? 42) - ((etat.tension_sociale ?? 45) / 10)
+      // ── Dérive naturelle + dynamique économique ──
+      const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v ?? 0))
+
+      // Politique : érosion lente de la popularité et montée des tensions
+      etat.popularite_joueur  = clamp((etat.popularite_joueur ?? 42) - 0.5, 0, 100)
+      etat.tension_sociale    = clamp((etat.tension_sociale   ?? 45) + 0.4, 0, 100)
+      etat.consentement_impot = clamp((etat.consentement_impot ?? 55) - 0.2, 0, 100)
+
+      // Économie : interaction entre pib, inflation et confiance
+      const pib    = etat.pib_croissance_pct ?? 0.8
+      const inflat = etat.inflation_pct      ?? 2.8
+
+      // Si croissance positive → légère amélioration des marchés
+      etat.indice_confiance_marches = clamp(
+        (etat.indice_confiance_marches ?? 50) + (pib > 0.5 ? 0.3 : pib < 0 ? -0.5 : 0),
+        0, 100
+      )
+
+      // Inflation influence le consentement à l'impôt et la tension sociale
+      if (inflat > 3.5) {
+        etat.consentement_impot = clamp((etat.consentement_impot ?? 55) - 0.4, 0, 100)
+        etat.tension_sociale    = clamp((etat.tension_sociale    ?? 45) + 0.3, 0, 100)
+      } else if (inflat < 1.5) {
+        etat.consentement_impot = clamp((etat.consentement_impot ?? 55) + 0.1, 0, 100)
+      }
+
+      // Déficit croissant si PIB faible
+      if (pib < 0) {
+        etat.deficit_milliards = Math.max(0, (etat.deficit_milliards ?? 173) + 1.5)
+      } else if (pib > 1.5) {
+        etat.deficit_milliards = Math.max(0, (etat.deficit_milliards ?? 173) - 0.8)
+      }
+
+      // Réserve diminue légèrement chaque tour (coûts de fonctionnement)
+      etat.reserve_budgetaire_milliards = Math.max(0,
+        (etat.reserve_budgetaire_milliards ?? 28) - 0.5
+      )
+
+      // Recalcul stabilité
+      etat.stabilite = Math.round(clamp(
+        (etat.popularite_joueur ?? 42)
+          - ((etat.tension_sociale ?? 45) / 10)
+          - (Math.max(0, -(etat.relation_ue ?? 20)) / 20),
+        0, 100
       ))
 
       // Avancer la date
@@ -240,30 +279,56 @@ export default function GameEngine({ partiJoueur, children }) {
   const appliquerLoiAdoptee = useCallback((loiId, impactsDirects = null) => {
     setEtatJeu(prev => {
       try {
-        if (prev.lois_votees?.includes(loiId)) return prev
+        // Pour les leviers (id commence par LEVIER_), pas de déduplication
+        const estLevier = loiId.startsWith('LEVIER_')
+        if (!estLevier && prev.lois_votees?.includes(loiId)) return prev
+
         let impacts = impactsDirects
         if (!impacts) {
           const loi = getLoi(loiId)
           if (!loi) return prev
           impacts = loi.impacts ?? {}
         }
+
         let etat = { ...prev }
+
+        // Appliquer TOUS les impacts — même les clés pas encore dans l'état
         Object.entries(impacts).forEach(([cle, valeur]) => {
-          if (typeof valeur === 'number' && cle in etat)
-            etat[cle] = Math.round(((etat[cle] ?? 0) + valeur) * 10) / 10
+          if (typeof valeur !== 'number') return
+          const actuel = etat[cle] ?? 0
+          etat[cle] = Math.round((actuel + valeur) * 10) / 10
         })
-        etat.popularite_joueur        = Math.max(0,   Math.min(100, etat.popularite_joueur        ?? 42))
-        etat.tension_sociale          = Math.max(0,   Math.min(100, etat.tension_sociale          ?? 45))
-        etat.stabilite                = Math.max(0,   Math.min(100, etat.stabilite                ?? 58))
-        etat.relation_ue              = Math.max(-20, Math.min(100, etat.relation_ue              ?? 20))
-        etat.deficit_milliards        = Math.max(0,               etat.deficit_milliards         ?? 173)
-        etat.inflation_pct            = Math.max(-5,  Math.min(20,  etat.inflation_pct            ?? 2.8))
-        etat.pib_croissance_pct       = Math.max(-10, Math.min(10,  etat.pib_croissance_pct       ?? 0.8))
-        etat.indice_confiance_marches = Math.max(0,   Math.min(100, etat.indice_confiance_marches ?? 50))
-        etat.consentement_impot       = Math.max(0,   Math.min(100, etat.consentement_impot       ?? 55))
-        etat.prix_electricite         = Math.max(0,               etat.prix_electricite          ?? 72)
-        etat.prix_baril               = Math.max(0,               etat.prix_baril                ?? 80)
-        etat.lois_votees = [...(etat.lois_votees ?? []), loiId]
+
+        // Clamp des indicateurs clés
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v ?? 0))
+        etat.popularite_joueur        = clamp(etat.popularite_joueur,        0,   100)
+        etat.tension_sociale          = clamp(etat.tension_sociale,          0,   100)
+        etat.stabilite                = clamp(etat.stabilite,                0,   100)
+        etat.relation_ue              = clamp(etat.relation_ue,              -100, 100)
+        etat.deficit_milliards        = Math.max(0, etat.deficit_milliards         ?? 173)
+        etat.reserve_budgetaire_milliards = Math.max(0, etat.reserve_budgetaire_milliards ?? 28)
+        etat.inflation_pct            = clamp(etat.inflation_pct,            -5,  20)
+        etat.pib_croissance_pct       = clamp(etat.pib_croissance_pct,       -10, 10)
+        etat.indice_confiance_marches = clamp(etat.indice_confiance_marches, 0,   100)
+        etat.consentement_impot       = clamp(etat.consentement_impot,       0,   100)
+        etat.pression_mediatique      = clamp(etat.pression_mediatique,      0,   100)
+        etat.dissimulation            = clamp(etat.dissimulation,            0,   100)
+        etat.prix_electricite         = Math.max(0, etat.prix_electricite          ?? 72)
+        etat.prix_baril               = Math.max(0, etat.prix_baril                ?? 80)
+        etat.prix_baril_dollars       = Math.max(0, etat.prix_baril_dollars        ?? 80)
+        etat.avancement_epr2_pct      = clamp(etat.avancement_epr2_pct,     0,   100)
+
+        // Recalcul stabilité si modifiée indirectement
+        const greves = (etat.tension_sociale ?? 45) / 10
+        const contraintesUE = Math.max(0, -(etat.relation_ue ?? 20)) / 20
+        etat.stabilite = Math.round(clamp(
+          (etat.popularite_joueur ?? 42) - greves - contraintesUE,
+          0, 100
+        ))
+
+        if (!estLevier) {
+          etat.lois_votees = [...(etat.lois_votees ?? []), loiId]
+        }
         return etat
       } catch (e) { console.warn('[appliquerLoiAdoptee]', e.message); return prev }
     })
