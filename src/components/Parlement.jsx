@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import anime from 'animejs'
 import { getToutesLois, getLoisDisponibles, getLoi } from '../engines/moteur-legislatif.js'
 import { CATALOGUE_LOIS } from '../data/lois/catalogue-lois.js'
+import { LOIS_PAR_PARTI, getToutesLoisPartis, getStatutLoi } from '../data/lois/lois-partis.js'
 
 const PARTIS_AN = [
   { id: 'LFI',          label: 'LFI',         sieges: 87,  couleur: '#cc0000', bloc: 'Gauche radicale',  vote_tendance: 'opposition' },
@@ -619,23 +620,48 @@ function CarteLoi({ loi, onVoter, dejaVotee, etatJeu, onSelect, selectionne }) {
     return true
   })()
   const impactsNotables = Object.entries(loi.impacts ?? {}).filter(([, v]) => v !== 0).slice(0, 4)
+
+  const statut = loi._statut
+  const statutConfig = {
+    propre:     { label: '⭐ Votre programme', bg: 'bg-yellow-900/40 text-yellow-300 border-yellow-700/40' },
+    allie:      { label: '🤝 Allié',           bg: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
+    opposition: { label: '⚔️ Opposition',      bg: 'bg-red-900/30 text-red-300 border-red-700/30' },
+  }
+  const statutStyle = statutConfig[statut]
+
+  const borderClass = statut === 'propre'
+    ? 'border-yellow-700/50 bg-yellow-950/10'
+    : statut === 'allie'
+    ? 'border-emerald-800/40 bg-emerald-950/10'
+    : selectionne
+    ? 'border-blue-500/60 bg-blue-950/20'
+    : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600/80 hover:bg-slate-800/60'
   return (
     <div className={`rounded-xl border transition-all ${
-      dejaVotee     ? 'border-emerald-800/40 bg-emerald-950/20 opacity-60'
+      dejaVotee      ? 'border-emerald-800/40 bg-emerald-950/20 opacity-60'
       : !conditionsOk ? 'border-slate-700/40 bg-slate-900/40 opacity-50'
-      : selectionne  ? 'border-blue-500/60 bg-blue-950/20'
-      : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600/80 hover:bg-slate-800/60'
+      : borderClass
     }`} onClick={() => onSelect?.(loi)}>
       <div className="p-3">
         <div className="flex items-start gap-2.5 mb-2">
           <span className="text-xl flex-shrink-0 mt-0.5">{loi.emoji}</span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white leading-tight truncate">{loi.titre}</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm font-semibold text-white leading-tight truncate">{loi.titre}</p>
+              {statutStyle && (
+                <span className={`text-xs px-1.5 py-0.5 rounded border font-semibold flex-shrink-0 ${statutStyle.bg}`}>
+                  {statutStyle.label}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">{loi.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap mb-2.5">
           <div className={`text-xs px-2 py-0.5 rounded font-bold ${proba > 60 ? 'bg-emerald-900/60 text-emerald-400' : proba > 35 ? 'bg-yellow-900/60 text-yellow-400' : 'bg-red-900/60 text-red-400'}`}>{proba}%</div>
+          {loi.parti_auteur && loi.parti_auteur !== (etatJeu?.parti_joueur) && (
+            <span className="text-xs text-slate-500 italic">par {loi.parti_auteur}</span>
+          )}
           {impactsNotables.map(([key, val]) => (
             <span key={key} className={`text-xs font-semibold ${getImpactColor(key, val)}`}>{val > 0 ? '+' : ''}{val} {key.replace(/_/g, ' ').replace(' pct', '%').replace(' milliards', 'Md')}</span>
           ))}
@@ -644,13 +670,13 @@ function CarteLoi({ loi, onVoter, dejaVotee, etatJeu, onSelect, selectionne }) {
           <div className="flex flex-col gap-1.5 mb-2.5 border-t border-slate-800/60 pt-2.5">
             {loi.partis_favorables?.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-emerald-500">OK</span>
+                <span className="text-xs text-emerald-500 font-medium">Pour</span>
                 {loi.partis_favorables.map(p => <span key={p} className="text-xs bg-emerald-950/50 text-emerald-400 border border-emerald-800/30 px-1.5 py-0.5 rounded">{p}</span>)}
               </div>
             )}
             {loi.partis_hostiles?.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-red-500">NON</span>
+                <span className="text-xs text-red-500 font-medium">Contre</span>
                 {loi.partis_hostiles.map(p => <span key={p} className="text-xs bg-red-950/50 text-red-400 border border-red-800/30 px-1.5 py-0.5 rounded">{p}</span>)}
               </div>
             )}
@@ -677,6 +703,7 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
   const [modalVote, setModalVote]         = useState(null)
   const [historiqueVotes, setHistorique]  = useState([])
   const [blocActif, setBlocActif]         = useState('ALL')
+  const [sourceActif, setSourceActif]     = useState('catalogue') // 'catalogue' | 'programme'
   const [recherche, setRecherche]         = useState('')
   const [ongletDroit, setOngletDroit]     = useState('hemicycle')
   const [loiSelectionnee, setLoiSel]      = useState(null)
@@ -695,16 +722,52 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
   const totalDroite = partis.filter(p => p.bloc.includes('Droite') || p.bloc.includes('Extreme')).reduce((s, p) => s + p.sieges, 0)
 
   const loisAdoptees = etatJeu?.lois_votees ?? []
+  const partiJoueur  = etatJeu?.parti_joueur ?? null
+
   const toutesLois   = useMemo(() => { try { return getToutesLois() } catch { return [] } }, [])
   const loisParBloc  = useMemo(() => { try { return CATALOGUE_LOIS  } catch { return {} } }, [])
 
+  // Lois du programme du parti joueur, enrichies avec statut
+  const loisProgramme = useMemo(() => {
+    if (!partiJoueur) return []
+    const propres = (LOIS_PAR_PARTI[partiJoueur] ?? []).map(l => ({ ...l, _statut: 'propre' }))
+    return propres
+  }, [partiJoueur])
+
+  // Toutes les lois de tous les partis pour le catalogue étendu
+  const toutesLoisPartis = useMemo(() => getToutesLoisPartis(), [])
+
   const loisFiltrees = useMemo(() => {
-    let lois = toutesLois
-    if (blocActif !== 'ALL') lois = loisParBloc[blocActif] ?? []
-    if (recherche.trim()) { const q = recherche.toLowerCase(); lois = lois.filter(l => l.titre?.toLowerCase().includes(q) || l.description?.toLowerCase().includes(q)) }
+    let lois
+
+    if (sourceActif === 'programme') {
+      lois = loisProgramme
+    } else {
+      // Catalogue général + lois partis fusionnés, sans doublons d'id
+      const idsExistants = new Set(toutesLois.map(l => l.id))
+      const loisPartisSupplémentaires = toutesLoisPartis.filter(l => !idsExistants.has(l.id))
+      lois = [...toutesLois, ...loisPartisSupplémentaires]
+
+      if (blocActif !== 'ALL') lois = loisParBloc[blocActif] ?? []
+    }
+
+    if (recherche.trim()) {
+      const q = recherche.toLowerCase()
+      lois = lois.filter(l => l.titre?.toLowerCase().includes(q) || l.description?.toLowerCase().includes(q))
+    }
     lois = lois.filter(l => !['art_49_3', 'art_50_1'].includes(l.id))
+    // Enrichir avec statut si parti joueur connu
+    if (partiJoueur) {
+      lois = lois.map(l => ({
+        ...l,
+        _statut: l._statut ?? getStatutLoi(l, partiJoueur),
+      }))
+      // Trier : propres en premier, puis alliés, puis reste
+      const ordre = { propre: 0, allie: 1, opposition: 2, neutre: 3 }
+      lois = [...lois].sort((a, b) => (ordre[a._statut] ?? 3) - (ordre[b._statut] ?? 3))
+    }
     return lois
-  }, [toutesLois, loisParBloc, blocActif, recherche])
+  }, [toutesLois, loisParBloc, toutesLoisPartis, loisProgramme, blocActif, sourceActif, recherche, partiJoueur])
 
   function handleVoter(loi) { setModalVote(loi) }
   function handleAdopte() {
@@ -754,9 +817,23 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
 
         {/* COLONNE GAUCHE */}
         <div className="flex flex-col gap-3">
+        {/* Switch source : Catalogue général / Mon programme */}
+          <div className="flex bg-slate-800/80 rounded-xl p-1 gap-1 mb-1">
+            <button onClick={() => { setSourceActif('catalogue'); setBlocActif('ALL') }}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${sourceActif === 'catalogue' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}>
+              📚 Catalogue général
+            </button>
+            <button onClick={() => setSourceActif('programme')}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${sourceActif === 'programme' ? 'bg-yellow-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}>
+              ⭐ Mon programme {partiJoueur ? `(${partiJoueur})` : ''}
+            </button>
+          </div>
+
+          {/* Filtres blocs — masqués en mode programme */}
+          {sourceActif === 'catalogue' && (
           <div className="flex gap-1.5 flex-wrap items-center">
             <button onClick={() => setBlocActif('ALL')} className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${blocActif === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-              Toutes ({toutesLois.filter(l => !['art_49_3','art_50_1'].includes(l.id)).length})
+              Toutes ({toutesLois.filter(l => !['art_49_3','art_50_1'].includes(l.id)).length + toutesLoisPartis.length})
             </button>
             {Object.entries(BLOCS_LABELS).map(([key, { label, emoji }]) => (
               <button key={key} onClick={() => setBlocActif(key)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${blocActif === key ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
@@ -764,6 +841,7 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
               </button>
             ))}
           </div>
+          )}
           <input type="text" placeholder="Rechercher une loi..." value={recherche} onChange={e => setRecherche(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700/60 text-white text-xs rounded-lg px-3 py-2 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
           <div className="flex flex-col gap-2 max-h-[680px] overflow-y-auto pr-1">
