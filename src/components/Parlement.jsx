@@ -122,18 +122,62 @@ function genererPositions(partis, W, H, cx, cy, R_MIN, R_STEP, RANGS) {
   return positions
 }
 
-function calculerVoteParti(partiId, loi, chambre = 'AN') {
+// bonusParParti : { partiId: deltaPour } pour cibler des partis via lobbies/medias
+function calculerVoteParti(partiId, loi, chambre = 'AN', bonusParParti = {}) {
   if (!loi) return { pour: 0.35, contre: 0.35, abstention: 0.30 }
   const favorables = loi.partis_favorables ?? []
   const hostiles   = loi.partis_hostiles   ?? []
   const partiBase  = partiId.replace('_S', '')
-  if (favorables.includes(partiBase) || favorables.includes(partiId)) return { pour: 0.90, contre: 0.04, abstention: 0.06 }
-  if (hostiles.includes(partiBase) || hostiles.includes(partiId))     return { pour: 0.04, contre: 0.90, abstention: 0.06 }
-  const partis = chambre === 'AN' ? PARTIS_AN : PARTIS_SENAT
-  const info   = partis.find(p => p.id === partiId)
-  if (info?.vote_tendance === 'soutien')    return { pour: 0.75, contre: 0.15, abstention: 0.10 }
-  if (info?.vote_tendance === 'opposition') return { pour: 0.10, contre: 0.75, abstention: 0.15 }
-  return { pour: 0.40, contre: 0.35, abstention: 0.25 }
+  let basePour, baseContre, baseAbst
+  if (favorables.includes(partiBase) || favorables.includes(partiId)) {
+    basePour = 0.90; baseContre = 0.04; baseAbst = 0.06
+  } else if (hostiles.includes(partiBase) || hostiles.includes(partiId)) {
+    basePour = 0.04; baseContre = 0.90; baseAbst = 0.06
+  } else {
+    const partis = chambre === 'AN' ? PARTIS_AN : PARTIS_SENAT
+    const info   = partis.find(p => p.id === partiId)
+    if (info?.vote_tendance === 'soutien')         { basePour = 0.75; baseContre = 0.15; baseAbst = 0.10 }
+    else if (info?.vote_tendance === 'opposition') { basePour = 0.10; baseContre = 0.75; baseAbst = 0.15 }
+    else                                           { basePour = 0.40; baseContre = 0.35; baseAbst = 0.25 }
+  }
+  // Appliquer bonus par parti (lobbies ciblés, médias, 50-1)
+  const delta = bonusParParti[partiBase] ?? bonusParParti[partiId] ?? 0
+  basePour = Math.min(0.95, Math.max(0.02, basePour + delta))
+  return { pour: basePour, contre: baseContre, abstention: baseAbst }
+}
+
+// Calcule bonus votes depuis lobbies, médias, leviers actifs
+function calculerBonusVote(loi, lobbiesActifs, canauxActifs, levierActif) {
+  let bonusSieges = 0
+  const bonusParParti = {}
+
+  for (const lobbyId of (lobbiesActifs ?? [])) {
+    const lobby = LOBBIES.find(l => l.id === lobbyId)
+    if (!lobby || !loi) continue
+    if (lobby.bonus_lois.includes(loi.id)) bonusSieges += lobby.effet_vote * 3
+    if (lobby.malus_lois.includes(loi.id)) bonusSieges -= lobby.effet_vote * 2
+  }
+
+  for (const canalId of (canauxActifs ?? [])) {
+    const canal = CANAUX_MEDIAS.find(c => c.id === canalId)
+    if (!canal) continue
+    const delta = canal.influence_pop * 0.025
+    for (const p of [...PARTIS_AN, ...PARTIS_SENAT]) {
+      if (p.vote_tendance === 'variable')
+        bonusParParti[p.id] = (bonusParParti[p.id] ?? 0) + delta
+    }
+    bonusSieges += Math.max(0, canal.influence_pop) * 1.5
+  }
+
+  if (levierActif === 'art_50_1') {
+    for (const p of [...PARTIS_AN, ...PARTIS_SENAT]) {
+      if (p.vote_tendance === 'variable')
+        bonusParParti[p.id] = (bonusParParti[p.id] ?? 0) + 0.12
+    }
+    bonusSieges += 18
+  }
+
+  return { bonusSieges: Math.round(bonusSieges), bonusParParti }
 }
 
 function getImpactColor(key, val) {
@@ -195,7 +239,7 @@ function HemicycleSVG({ partis, total, majorite, etatVote, siegeSelectionne, set
 
 // ─── SequenceVote ────────────────────────────────────────────
 
-function SequenceVote({ loi, chambre, partis, total, majorite, onTermine }) {
+function SequenceVote({ loi, chambre, partis, total, majorite, onTermine, bonusSieges = 0, bonusParParti = {} }) {
   const [etatVote, setEtatVote]       = useState({})
   const [groupeActif, setGroupeActif] = useState(null)
   const [compteurs, setCompteurs]     = useState({ pour: 0, contre: 0, abstention: 0 })
@@ -210,7 +254,7 @@ function SequenceVote({ loi, chambre, partis, total, majorite, onTermine }) {
         setGroupeActif(parti.id)
         setEtatVote(prev => ({ ...prev, [parti.id]: 'en_cours' }))
         setTimeout(() => {
-          const { pour, contre } = calculerVoteParti(parti.id, loi, chambre)
+          const { pour, contre } = calculerVoteParti(parti.id, loi, chambre, bonusParParti)
           const votesPour = Math.round(parti.sieges * pour)
           const votesContre = Math.round(parti.sieges * contre)
           const votesAbstention = parti.sieges - votesPour - votesContre
@@ -222,13 +266,15 @@ function SequenceVote({ loi, chambre, partis, total, majorite, onTermine }) {
           setEtatVote(prev => ({ ...prev, [parti.id]: votesPour > votesContre ? 'pour' : 'contre' }))
           setGroupeActif(null)
           if (i === partis.length - 1) {
-            setTimeout(() => { setEtape('resultat'); onTermine?.({ pour: compteurRef.current.pour, contre: compteurRef.current.contre, abstention: compteurRef.current.abstention, adopte: compteurRef.current.pour >= majorite }) }, 700)
+            // Appliquer les bonusSieges au total final
+            const pourFinal = compteurRef.current.pour + bonusSieges
+            setTimeout(() => { setEtape('resultat'); onTermine?.({ pour: pourFinal, contre: compteurRef.current.contre, abstention: compteurRef.current.abstention, adopte: pourFinal >= majorite }) }, 700)
           }
         }, 500)
       }, delai)
       delai += 800
     })
-  }, [partis, loi, chambre, majorite])
+  }, [partis, loi, chambre, majorite, bonusSieges, bonusParParti])
 
   useEffect(() => { setTimeout(animer, 600) }, [])
   const adopte = compteurs.pour >= majorite
@@ -279,7 +325,7 @@ function SequenceVote({ loi, chambre, partis, total, majorite, onTermine }) {
 
 // ─── ModalVote ───────────────────────────────────────────────
 
-function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
+function ModalVote({ loi, open, onClose, onAdopte, onRejete, bonusSieges = 0, bonusParParti = {} }) {
   const [phase, setPhase]                 = useState('AN')
   const [resultatAN, setResultatAN]       = useState(null)
   const [resultatSenat, setResultatSenat] = useState(null)
@@ -295,7 +341,7 @@ function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm" />
         <Dialog.Content className="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl max-h-[94vh] overflow-y-auto bg-slate-950 border border-slate-700/60 rounded-2xl shadow-2xl p-5">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-1.5">
               {[{ id: 'AN', label: 'AN' }, { id: 'SENAT', label: 'Senat' }, { id: 'CMP', label: 'CMP' }, { id: 'DONE', label: 'Fin' }].map(({ id, label }, i) => (
                 <div key={id} className="flex items-center gap-1.5">
@@ -306,13 +352,22 @@ function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
             </div>
             <Dialog.Close asChild><button className="text-slate-600 hover:text-slate-300 text-lg">x</button></Dialog.Close>
           </div>
-          {phase === 'AN' && <SequenceVote loi={loi} chambre="AN" partis={PARTIS_AN} total={TOTAL_AN} majorite={MAJORITE_AN} onTermine={handleResultatAN} />}
+
+          {/* Indicateur bonus actifs */}
+          {bonusSieges > 0 && (
+            <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-800/30 rounded-lg px-3 py-1.5 mb-3 flex-wrap">
+              <span className="text-xs text-emerald-400 font-bold">Bonus actifs :</span>
+              <span className="text-xs text-emerald-300">+{bonusSieges} votes supplementaires appliques</span>
+            </div>
+          )}
+
+          {phase === 'AN' && <SequenceVote loi={loi} chambre="AN" partis={PARTIS_AN} total={TOTAL_AN} majorite={MAJORITE_AN} onTermine={handleResultatAN} bonusSieges={bonusSieges} bonusParParti={bonusParParti} />}
           {phase === 'SENAT' && (
             <div className="flex flex-col gap-3">
               <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2 text-center">
                 <p className="text-xs text-emerald-400 font-semibold">Adoptee a l AN ({resultatAN?.pour} pour) - Passage au Senat</p>
               </div>
-              <SequenceVote loi={loi} chambre="SENAT" partis={PARTIS_SENAT} total={TOTAL_SENAT} majorite={MAJORITE_SENAT} onTermine={handleResultatSenat} />
+              <SequenceVote loi={loi} chambre="SENAT" partis={PARTIS_SENAT} total={TOTAL_SENAT} majorite={MAJORITE_SENAT} onTermine={handleResultatSenat} bonusSieges={Math.round(bonusSieges * 0.5)} bonusParParti={bonusParParti} />
             </div>
           )}
           {phase === 'CMP' && (
@@ -344,33 +399,49 @@ function ModalVote({ loi, open, onClose, onAdopte, onRejete }) {
 
 // ─── PanneauLeviers ──────────────────────────────────────────
 
-function PanneauLeviers({ appliquerLoiAdoptee, usagesLeviers, setUsagesLeviers }) {
+function PanneauLeviers({ appliquerLoiAdoptee, usagesLeviers, setUsagesLeviers, levierActif, setLevierActif }) {
   const [confirm, setConfirm] = useState(null)
 
   function confirmerLevier() {
     if (!confirm) return
     setUsagesLeviers(prev => ({ ...prev, [confirm.id]: (prev[confirm.id] ?? 0) + 1 }))
-    if (appliquerLoiAdoptee) appliquerLoiAdoptee(`LEVIER_${confirm.id}_${Date.now()}`, confirm.effets)
+    if (confirm.id === 'art_49_3') {
+      // 49-3 : effets immédiats sur l'état (passe la loi EN FORCE — effets politiques négatifs)
+      if (appliquerLoiAdoptee) appliquerLoiAdoptee(`LEVIER_49_3_${Date.now()}`, confirm.effets)
+    } else if (confirm.id === 'art_50_1') {
+      // 50-1 : active le bonus pour le prochain vote
+      setLevierActif(prev => prev === 'art_50_1' ? null : 'art_50_1')
+    }
     setConfirm(null)
   }
 
   return (
     <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
       <h3 className="text-sm font-bold text-white mb-3">Leviers Constitutionnels</h3>
+      {levierActif === 'art_50_1' && (
+        <div className="bg-blue-950/40 border border-blue-700/40 rounded-lg px-3 py-2 mb-3">
+          <p className="text-xs text-blue-300 font-semibold">Article 50.1 actif — bonus applique au prochain vote</p>
+          <button onClick={() => setLevierActif(null)} className="text-xs text-blue-500 hover:text-blue-300 mt-1">Desactiver</button>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         {LEVIERS.map(levier => {
           const usages = usagesLeviers[levier.id] ?? 0
           const epuise = usages >= levier.usage_max
           const isAmber = levier.couleur === 'amber'
+          const estActif = levierActif === levier.id
           return (
             <div key={levier.id} className={`border rounded-xl p-3 transition-all ${
               epuise ? 'opacity-40 border-slate-700/40 bg-slate-900/40'
+              : estActif ? 'border-blue-500/60 bg-blue-950/30'
               : isAmber ? 'bg-amber-950/30 border-amber-800/40'
               : 'bg-blue-950/30 border-blue-800/40'}`}>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
-                  <p className={`text-sm font-bold ${isAmber ? 'text-amber-300' : 'text-blue-300'}`}>{levier.emoji} {levier.label}</p>
+                  <p className={`text-sm font-bold ${estActif ? 'text-blue-300' : isAmber ? 'text-amber-300' : 'text-blue-300'}`}>{levier.emoji} {levier.label}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{levier.description}</p>
+                  {levier.id === 'art_50_1' && <p className="text-xs text-blue-400/70 mt-1">Active un bonus de +18 votes pour le prochain vote</p>}
+                  {levier.id === 'art_49_3' && <p className="text-xs text-amber-400/70 mt-1">Promulgue la loi en cours directement — avec consequences politiques</p>}
                 </div>
                 {levier.usage_max < 99 && (
                   <span className="text-xs text-slate-500 flex-shrink-0"><span className={usages > 0 ? 'text-amber-400 font-bold' : ''}>{usages}</span>/{levier.usage_max}</span>
@@ -385,8 +456,8 @@ function PanneauLeviers({ appliquerLoiAdoptee, usagesLeviers, setUsagesLeviers }
                 <p className="text-xs text-slate-600 italic flex-1">{levier.risque}</p>
                 {!epuise && (
                   <button onClick={() => setConfirm(levier)}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors flex-shrink-0 ${isAmber ? 'bg-amber-700 hover:bg-amber-600' : 'bg-blue-700 hover:bg-blue-600'} text-white`}>
-                    Activer
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors flex-shrink-0 ${estActif ? 'bg-blue-800 text-blue-200' : isAmber ? 'bg-amber-700 hover:bg-amber-600' : 'bg-blue-700 hover:bg-blue-600'} text-white`}>
+                    {estActif ? 'Actif' : 'Activer'}
                   </button>
                 )}
                 {epuise && <span className="text-xs text-slate-600 font-semibold">Epuise</span>}
@@ -466,16 +537,22 @@ function PanneauLobbies({ loiSelectionnee, lobbiesActifs, setLobbiesActifs }) {
 
 // ─── PanneauMedias ───────────────────────────────────────────
 
-function PanneauMedias({ etatJeu }) {
-  const [canalActif, setCanalActif] = useState(null)
+function PanneauMedias({ etatJeu, canauxActifs, setCanauxActifs }) {
   const pressionMed   = etatJeu?.pression_mediatique ?? 15
   const dissimulation = etatJeu?.dissimulation       ?? 20
   const niveauPress   = pressionMed < 30 ? { label: 'Faible',  color: 'text-emerald-400' }
                       : pressionMed < 60 ? { label: 'Moderee', color: 'text-yellow-400'  }
                       :                    { label: 'Elevee',   color: 'text-red-400'     }
+  const bonusTotal = canauxActifs.reduce((s, id) => {
+    const c = CANAUX_MEDIAS.find(x => x.id === id)
+    return s + (c ? Math.max(0, c.influence_pop) * 1.5 : 0)
+  }, 0)
   return (
     <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
-      <h3 className="text-sm font-bold text-white mb-3">Pouvoir Mediatique</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold text-white">Pouvoir Mediatique</h3>
+        {bonusTotal > 0 && <span className="text-xs text-emerald-400 font-bold">+{Math.round(bonusTotal)} votes actifs</span>}
+      </div>
       <div className="grid grid-cols-2 gap-2.5 mb-4">
         <div className="rounded-lg p-2.5 border border-slate-700/40 bg-slate-900/40">
           <p className="text-xs text-slate-400 mb-0.5">Pression mediatique</p>
@@ -496,26 +573,26 @@ function PanneauMedias({ etatJeu }) {
           <p className="text-xs text-slate-500 mt-1">Secrets accumules</p>
         </div>
       </div>
-      <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Canaux d influence</p>
+      <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Canaux — cliquez pour activer avant un vote</p>
       <div className="flex flex-col gap-1.5">
-        {CANAUX_MEDIAS.map(canal => (
-          <div key={canal.id}
-            className={`border rounded-lg px-3 py-2 cursor-pointer transition-all ${canalActif === canal.id ? 'border-blue-600/60 bg-blue-950/30' : 'border-slate-700/40 bg-slate-900/40 hover:border-slate-600/60'}`}
-            onClick={() => setCanalActif(prev => prev === canal.id ? null : canal.id)}>
-            <div className="flex items-center gap-2">
-              <span className="text-sm">{canal.emoji}</span>
-              <p className="text-xs font-semibold text-slate-200 flex-1">{canal.label}</p>
-              <span className="text-xs text-slate-500">{canal.audience}%</span>
-              <span className={`text-xs font-semibold ${canal.influence_pop >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>pop {canal.influence_pop > 0 ? '+' : ''}{canal.influence_pop}</span>
-            </div>
-            {canalActif === canal.id && (
-              <div className="mt-1.5 text-xs text-slate-400 flex gap-3">
-                <span>Biais : <strong className="text-slate-200">{canal.biais}</strong></span>
-                <span>Tension {canal.influence_tension > 0 ? '+' : ''}{canal.influence_tension}</span>
+        {CANAUX_MEDIAS.map(canal => {
+          const actif = canauxActifs.includes(canal.id)
+          const bonusCanal = Math.round(Math.max(0, canal.influence_pop) * 1.5)
+          return (
+            <div key={canal.id}
+              className={`border rounded-lg px-3 py-2 cursor-pointer transition-all ${actif ? 'border-emerald-600/60 bg-emerald-950/20' : 'border-slate-700/40 bg-slate-900/40 hover:border-slate-600/60'}`}
+              onClick={() => setCanauxActifs(prev => prev.includes(canal.id) ? prev.filter(c => c !== canal.id) : [...prev, canal.id])}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">{canal.emoji}</span>
+                <p className="text-xs font-semibold text-slate-200 flex-1">{canal.label}</p>
+                <span className="text-xs text-slate-500">{canal.audience}%</span>
+                {bonusCanal > 0 && <span className={`text-xs font-bold ${actif ? 'text-emerald-400' : 'text-slate-500'}`}>+{bonusCanal} votes</span>}
+                <span className={`text-xs font-semibold ${canal.influence_pop >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>pop {canal.influence_pop > 0 ? '+' : ''}{canal.influence_pop}</span>
               </div>
-            )}
-          </div>
-        ))}
+              {actif && <p className="text-xs text-emerald-400/70 mt-1">Biais : {canal.biais} — actif pour le prochain vote</p>}
+            </div>
+          )
+        })}
       </div>
       {pressionMed >= 60 && (
         <div className="mt-3 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">
@@ -604,6 +681,8 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
   const [ongletDroit, setOngletDroit]     = useState('hemicycle')
   const [loiSelectionnee, setLoiSel]      = useState(null)
   const [lobbiesActifs, setLobbiesActifs] = useState([])
+  const [canauxActifs, setCanauxActifs]   = useState([])
+  const [levierActif, setLevierActif]     = useState(null) // 'art_50_1' ou null
   const [usagesLeviers, setUsagesLeviers] = useState({})
 
   const partis   = vue === 'AN' ? PARTIS_AN    : PARTIS_SENAT
@@ -634,12 +713,20 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
       else voterLoi?.(modalVote.id, 577)
       setHistorique(h => [{ loi: modalVote, resultat: 'adoptee', date: etatJeu?.date ?? 'Mars 2026' }, ...h])
     }
+    setLevierActif(null) // réinitialiser le levier après le vote
     setModalVote(null)
   }
   function handleRejete() {
     if (modalVote) setHistorique(h => [{ loi: modalVote, resultat: 'rejetee', date: etatJeu?.date ?? 'Mars 2026' }, ...h])
+    setLevierActif(null)
     setModalVote(null)
   }
+
+  // Calcul des bonus pour le vote en cours
+  const { bonusSieges: bonusSiegesActif, bonusParParti: bonusParPartiActif } = useMemo(
+    () => calculerBonusVote(modalVote, lobbiesActifs, canauxActifs, levierActif),
+    [modalVote, lobbiesActifs, canauxActifs, levierActif]
+  )
 
   const ONGLETS_DROITE = [
     { id: 'hemicycle', label: 'Hemicycle' },
@@ -650,13 +737,16 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
 
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-4">
-      <ModalVote loi={modalVote} open={!!modalVote} onClose={() => setModalVote(null)} onAdopte={handleAdopte} onRejete={handleRejete} />
+      <ModalVote loi={modalVote} open={!!modalVote} onClose={() => setModalVote(null)} onAdopte={handleAdopte} onRejete={handleRejete} bonusSieges={bonusSiegesActif} bonusParParti={bonusParPartiActif} />
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-bold text-white">Parlement - Lois & Hemicycle</h2>
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span className="text-emerald-400 font-bold">{loisAdoptees.length}</span> loi{loisAdoptees.length !== 1 ? 's' : ''} promulguee{loisAdoptees.length !== 1 ? 's' : ''}
-          {lobbiesActifs.length > 0 && <span className="text-blue-400 font-bold">· {lobbiesActifs.length} lobby actif</span>}
+          {lobbiesActifs.length > 0 && <span className="text-blue-400 font-bold">· {lobbiesActifs.length} lobby</span>}
+          {canauxActifs.length > 0 && <span className="text-cyan-400 font-bold">· {canauxActifs.length} media</span>}
+          {levierActif && <span className="text-blue-300 font-bold">· 50.1 actif</span>}
+          {bonusSiegesActif > 0 && <span className="text-emerald-300 font-bold">· +{bonusSiegesActif} votes bonus</span>}
         </div>
       </div>
 
@@ -761,7 +851,7 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
           )}
 
           {ongletDroit === 'leviers' && (
-            <PanneauLeviers appliquerLoiAdoptee={appliquerLoiAdoptee} usagesLeviers={usagesLeviers} setUsagesLeviers={setUsagesLeviers} />
+            <PanneauLeviers appliquerLoiAdoptee={appliquerLoiAdoptee} usagesLeviers={usagesLeviers} setUsagesLeviers={setUsagesLeviers} levierActif={levierActif} setLevierActif={setLevierActif} />
           )}
 
           {ongletDroit === 'lobbies' && (
@@ -769,7 +859,7 @@ export default function Parlement({ etatJeu, voterLoi, appliquerLoiAdoptee }) {
           )}
 
           {ongletDroit === 'medias' && (
-            <PanneauMedias etatJeu={etatJeu} />
+            <PanneauMedias etatJeu={etatJeu} canauxActifs={canauxActifs} setCanauxActifs={setCanauxActifs} />
           )}
         </div>
       </div>
